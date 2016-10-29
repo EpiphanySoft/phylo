@@ -1,0 +1,23 @@
+{
+  "name": "phylo",
+  "version": "0.0.1",
+  "description": "File operations class",
+  "main": "File.js",
+  "scripts": {
+    "test": "test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dongryphon/phylo.git"
+  },
+  "keywords": [
+    "file",
+    "path"
+  ],
+  "author": "dongryphon (Don Griffin)",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/dongryphon/phylo/issues"
+  },
+  "homepage": "https://github.com/dongryphon/phylo#readme"
+}
