@@ -1,2 +1,8 @@
 /.idea
 node_modules
+bin/phylo.i*
+bin/phylo.pdb
+phylo.VC.*
+phylo.vcx*
+/windows/phylo/.vs
+/windows/phylo/ipch/
