@@ -3,13 +3,81 @@
 const Fs = require('fs');
 const OS = require('os');
 const Path = require('path');
+const ChildProcess = require('child_process');
 
 const re = {
     slash: /\\/g,
     split: /[\/\\]/g
 };
 
+const dateParts = [
+    'birthtime',
+    'atime',
+    'mtime'
+];
+
+/**
+ * This class wraps a path to a file or directory and provides methods to ease processing
+ * and operating on that path.
+ *
+ * ## Naming Conventions
+ *
+ * Since it can be confusing when a string is returned or a `File` instance, a naming
+ * convention is used throughout. Any method that ends with "Path" returns a string,
+ * while all other methods return a `File`. Methods often come in pairs: one that returns
+ * the string form and one that returns a `File`. In general, it is safest/best to stay
+ * in the realm of `File` objects so their names are more concise.
+ */
 class File {
+    static run (cmd, ...args) {
+        return new Promise(resolve => {
+            var lines = "";
+            var process = ChildProcess.spawn(cmd, args, { encoding: 'utf8' });
+
+            process.stdout.on('data', data => {
+                lines += data.toString();
+            });
+
+            // process.on('error', function(err) {
+            // });
+
+            process.on('close', (code, signal) => {
+                if (process.exitCode) {
+                    resolve(process.exitCode);
+                }
+                else {
+                    resolve(lines.trim().split('\r\n'));
+                }
+            });
+        });
+    }
+
+    static winDir (path) {
+        return File.winRun('dir', path).then(lines => {
+            let content = lines.filter(line => !!line);
+            return content.map(File.winParseStat);
+        });
+    }
+
+    static winParseStat (text) {
+        // attr/ctime/atime/mtime/size/name
+        // [0]  [1]   [2]   [3]   [4]  [5]
+        let parts = text.split('/');
+        let stat = new Fs.Stats();
+
+        for (let i = 0; i < dateParts.length; ++i) {
+            let d = new Date();
+
+            d.setTime(+parts[i+1] * 1000); // millisec
+
+            stat[dateParts[i]] = d;
+        }
+    }
+
+    static winRun (...args) {
+        return File.run(File.winExe, ...args);
+    }
+
     static from (path) {
         var file = path || null;
 
@@ -22,12 +90,25 @@ class File {
 
     /**
      * This method is the same as `join()` in the `path` module except that the items
+     * can be `File` instances or `String` and a `File` instance is returned.
+     * @param {File/String...} parts Path pieces to join using `path.join()`.
+     * @return {File}
+     */
+    static join (...parts) {
+        var f = File.joinPath(...parts);
+        return new File(f);
+    }
+
+    /**
+     * This method is the same as `join()` in the `path` module except that the items
      * can be `File` instances or `String`.
      * @param {File/String...} parts Path pieces to join using `path.join()`.
      * @return {String}
      */
-    static join (...parts) {
-        for (let i = 0, n = parts.length; i < n; ++i) {
+    static joinPath (...parts) {
+        let n = parts && parts.length || 0;
+
+        for (let i = 0; i < n; ++i) {
             let p = parts[i];
 
             if (p.$isFile) {
@@ -35,7 +116,9 @@ class File {
             }
         }
 
-        return (parts && parts.length && Path.join(...parts)) || '';
+        let ret = (n === 1) ? parts[0] : (n && Path.join(...parts));
+
+        return ret || '';
     }
 
     static path (file) {
@@ -44,11 +127,22 @@ class File {
 
     /**
      * This method is the same as `resolve()` in the `path` module except that the items
+     * can be `File` instances or `String` and a `File` instance is returned.
+     * @param {File/String...} parts Path pieces to resolve using `path.resolve()`.
+     * @return {File}
+     */
+    static resolve (...parts) {
+        var f = File.resolvePath(...parts);
+        return new File(f);
+    }
+
+    /**
+     * This method is the same as `resolve()` in the `path` module except that the items
      * can be `File` instances or `String`.
      * @param {File/String...} parts Path pieces to resolve using `path.resolve()`.
      * @return {String}
      */
-    static resolve (...parts) {
+    static resolvePath (...parts) {
         for (let i = 0, n = parts.length; i < n; ++i) {
             let p = parts[i];
 
@@ -66,7 +160,7 @@ class File {
     }
 
     constructor (...parts) {
-        this.path = File.join(...parts);
+        this.path = File.joinPath(...parts);
     }
 
     //-----------------------------------------------------------------
@@ -88,10 +182,14 @@ class File {
         var parent = this._parent;
 
         if (parent === undefined) {
-            let index = this.lastSeparator();
-            let p = (index > -1 && this.path.substr(0, index)) || null;
+            let path = this.path;
+            let ret = Path.resolve(path, '..');
 
-            this._parent = parent = p && new File(p);
+            if (path === ret) {
+                ret = null;
+            }
+
+            this._parent = parent = ret && new File(ret);
         }
 
         return parent;
@@ -175,11 +273,11 @@ class File {
     }
 
     joinPath (...parts) {
-        return File.join(this, ...parts);
+        return File.joinPath(this, ...parts);
     }
 
     join (...parts) {
-        return File.from(File.join(this, ...parts));
+        return File.join(this, ...parts);
     }
 
     lastSeparator () {
@@ -224,11 +322,11 @@ class File {
     }
 
     resolvePath (...parts) {
-        return File.resolve(this, ...parts);
+        return File.resolvePath(this, ...parts);
     }
 
     resolve (...parts) {
-        return File.from(File.resolve(this, ...parts));
+        return File.resolve(this, ...parts);
     }
 
     slashifiedPath () {
@@ -245,6 +343,25 @@ class File {
 
     split () {
         return File.split(this);
+    }
+
+    stat () {
+        if (File.winExe) {
+            return File.winDir(this.path).then(lines => {
+                //
+            });
+        }
+
+        return new Promise((resolve, reject) => {
+            Fs.stat(this.path, (err, stats) => {
+                if (err) {
+                    reject(err);
+                }
+                else {
+                    resolve(stats);
+                }
+            });
+        });
     }
 
     toString () {
@@ -295,9 +412,9 @@ Object.assign(File.prototype, {
     $isFile: true,
     _re: re,
 
-    _extent: null,
-    _name: null,
-    _parent: null
+    _extent: undefined,
+    _name: undefined,
+    _parent: undefined
 });
 
 const platform = OS.platform();
@@ -310,4 +427,25 @@ File.CASE = !File.WIN && !File.MAC;
 File.re = re;
 File.separator = Path.sep;
 
+File.winExe = File.WIN ? Path.resolve(__dirname, 'bin/phylo.exe') : null;
+
+console.log(`File.winExe = ${File.winExe}`);
+
 module.exports = File;
+
+var f = File.from(process.cwd());
+f = File.from('/foo/bar/baz');
+//f = File.from('C:/foo//bar');
+console.log(f.path);
+
+let p = f.parent;
+console.log(p.path);
+
+p = p.parent;
+console.log(p.path);
+
+p = p.parent;
+console.log(p);
+console.log(p === null);
+
+console.log(['a','','b'].filter(a => !!a).map(a => a.toUpperCase()));
