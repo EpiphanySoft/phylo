@@ -10,12 +10,6 @@ const re = {
     split: /[\/\\]/g
 };
 
-const dateParts = [
-    'birthtime',
-    'atime',
-    'mtime'
-];
-
 /**
  * This class wraps a path to a file or directory and provides methods to ease processing
  * and operating on that path.
@@ -29,55 +23,6 @@ const dateParts = [
  * in the realm of `File` objects so their names are more concise.
  */
 class File {
-    static run (cmd, ...args) {
-        return new Promise(resolve => {
-            var lines = "";
-            var process = ChildProcess.spawn(cmd, args, { encoding: 'utf8' });
-
-            process.stdout.on('data', data => {
-                lines += data.toString();
-            });
-
-            // process.on('error', function(err) {
-            // });
-
-            process.on('close', (code, signal) => {
-                if (process.exitCode) {
-                    resolve(process.exitCode);
-                }
-                else {
-                    resolve(lines.trim().split('\r\n'));
-                }
-            });
-        });
-    }
-
-    static winDir (path) {
-        return File.winRun('dir', path).then(lines => {
-            let content = lines.filter(line => !!line);
-            return content.map(File.winParseStat);
-        });
-    }
-
-    static winParseStat (text) {
-        // attr/ctime/atime/mtime/size/name
-        // [0]  [1]   [2]   [3]   [4]  [5]
-        let parts = text.split('/');
-        let stat = new Fs.Stats();
-
-        for (let i = 0; i < dateParts.length; ++i) {
-            let d = new Date();
-
-            d.setTime(+parts[i+1] * 1000); // millisec
-
-            stat[dateParts[i]] = d;
-        }
-    }
-
-    static winRun (...args) {
-        return File.run(File.winExe, ...args);
-    }
-
     static from (path) {
         var file = path || null;
 
@@ -266,7 +211,7 @@ class File {
         var p = this.path;
         return p && Path.isAbsolute(p);
     }
-    
+
     isRelative () {
         var p = this.path;
         return p && !Path.isAbsolute(p);
@@ -346,22 +291,25 @@ class File {
     }
 
     stat () {
-        if (File.winExe) {
-            return File.winDir(this.path).then(lines => {
-                //
-            });
-        }
+        // if (File.WIN) {
+        //     return Win.dir(this.path).then(stats => {
+        //         console.log('stats:', stats);
+        //         return stats[0];
+        //     });
+        // }
 
-        return new Promise((resolve, reject) => {
-            Fs.stat(this.path, (err, stats) => {
-                if (err) {
-                    reject(err);
-                }
-                else {
-                    resolve(stats);
-                }
-            });
-        });
+        return Fs.statSync(this.path);
+    }
+
+    statLink () {
+        // if (File.WIN) {
+        //     return Win.dir(this.path).then(stats => {
+        //         console.log('stats:', stats);
+        //         return stats[0];
+        //     });
+        // }
+
+        return Fs.lstatSync(this.path);
     }
 
     toString () {
@@ -406,9 +354,33 @@ class File {
     unterminate () {
         return File.from(this.unterminatedPath());
     }
+
+    //------------------------------------------------------------------
+
+    getStat () {
+        // if (File.WIN) {
+        //     return Win.dir(this.path).then(stats => {
+        //         console.log('stats:', stats);
+        //         return stats[0];
+        //     });
+        // }
+
+        return new Promise((resolve, reject) => {
+            Fs.stat(this.path, (err, stats) => {
+                if (err) {
+                    reject(err);
+                }
+                else {
+                    resolve(stats);
+                }
+            });
+        });
+    }
 }
 
-Object.assign(File.prototype, {
+const proto = File.prototype;
+
+Object.assign(proto, {
     $isFile: true,
     _re: re,
 
@@ -427,25 +399,121 @@ File.CASE = !File.WIN && !File.MAC;
 File.re = re;
 File.separator = Path.sep;
 
-File.winExe = File.WIN ? Path.resolve(__dirname, 'bin/phylo.exe') : null;
+function addTypeTest (name, statMethod) {
+    let prop = '_' + name;
 
-console.log(`File.winExe = ${File.winExe}`);
+    statMethod = statMethod || 'stat';
+    proto[prop] = null;
+
+    return proto[name] = function () {
+        let value = this[prop];
+
+        if (value === null) {
+            let stat = this[statMethod]();
+
+            this[prop] = value = stat[name]();
+        }
+
+        return value;
+    };
+}
+
+proto.isLink = addTypeTest('isSymbolicLink', 'statLink');
+
+[
+    'isBlockDevice', 'isCharacterDevice', 'isDirectory', 'isFile', 'isFIFO',
+    'isSocket'
+].forEach(fn => addTypeTest(fn));
+
+proto.isDir = proto.isDirectory;
+
+//------------------------------------------------------------
+
+const dateParts = [
+    'birthtime',
+    'atime',
+    'mtime'
+];
+
+class Win {
+    static dir (path) {
+        return Win.run('dir', path).then(lines => {
+            let content = lines.filter(line => !!line);
+            return content.map(Win.parseStat);
+        });
+    }
+
+    static parseStat (text) {
+        // attr/ctime/atime/mtime/size/name
+        // [0]  [1]   [2]   [3]   [4]  [5]
+        let parts = text.split('/');
+        let stat = new Fs.Stats();
+
+        for (let i = 0; i < dateParts.length; ++i) {
+            let d = new Date();
+
+            d.setTime(+parts[i+1] * 1000); // millisec
+
+            stat[dateParts[i]] = d;
+        }
+
+        stat.attribs = parts[0];
+        stat.ctime = stat.mtime;  // no ctime on Windows
+        stat.path = parts[5];
+        stat.size = +parts[4];
+
+        return stat;
+    }
+
+    static run (...args) {
+        return Win.spawn(Win.exe, ...args);
+    }
+
+    static spawn (cmd, ...args) {
+        return new Promise(resolve => {
+            var lines = '';
+            var process = ChildProcess.spawn(cmd, args, { encoding: 'utf8' });
+
+            process.stdout.on('data', data => {
+                lines += data.toString();
+                console.log('data:', data);
+            });
+
+            process.on('error', function(err) {
+                console.log('error', err);
+            });
+            process.on('exit', function(err) {
+                console.log('exit', err);
+            });
+
+            process.on('close', (code, signal) => {
+                console.log(`${cmd} ${args.join(" ")}:`, lines, ` (exit ${process.exitCode})`);
+                if (process.exitCode) {
+                    resolve(process.exitCode);
+                }
+                else {
+                    resolve(lines.trim().split('\r\n'));
+                }
+            });
+        });
+    }
+}
+
+if (File.WIN) {
+    Win.exe = Path.resolve(__dirname, 'bin/phylo.exe');
+
+    File.Win = Win;
+
+    console.log(`File.Win.exe = ${Win.exe}`);
+}
+
+//------------------------------------------------------------
 
 module.exports = File;
 
+//------------------------------------------------------------
+
 var f = File.from(process.cwd());
-f = File.from('/foo/bar/baz');
-//f = File.from('C:/foo//bar');
-console.log(f.path);
 
-let p = f.parent;
-console.log(p.path);
-
-p = p.parent;
-console.log(p.path);
-
-p = p.parent;
-console.log(p);
-console.log(p === null);
-
-console.log(['a','','b'].filter(a => !!a).map(a => a.toUpperCase()));
+console.log('The stat: ', f.stat());
+console.log(`is: file=${f.isFile()} dir=${f.isDirectory()}`);
