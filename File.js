@@ -21,8 +21,43 @@ const re = {
  * while all other methods return a `File`. Methods often come in pairs: one that returns
  * the string form and one that returns a `File`. In general, it is safest/best to stay
  * in the realm of `File` objects so their names are more concise.
+ *
+ *      var absFile = file.absolutify();  // a File object
+ *
+ *      var absPath = file.absolutePath(); // a string
+ *
+ * ### Synchronous vs Asynchronous
+ *
+ * All async methods return promises and have names that look like `getFoo()`. For example,
+ * the `stat` method is synchronous while the asynchronous version is `getStat`.
+ *
+ *      var st = file.stat();  // sync
+ *
+ *      file.getStat().then(st => {
+ *          // async
+ *      });
  */
 class File {
+    static access (f) {
+        if (!f) {
+            return null;
+        }
+
+        return File.from(f).access();
+    }
+
+    static cwd () {
+        return new File(process.cwd());
+    }
+
+    static exists (f) {
+        if (!f) {
+            return false;
+        }
+
+        return File.from(f).exists();
+    }
+
     static from (path) {
         var file = path || null;
 
@@ -31,6 +66,22 @@ class File {
         }
 
         return file;
+    }
+
+    static isDir (f) {
+        if (!f) {
+            return false;
+        }
+
+        return File.from(f).isDir();
+    }
+
+    static isFile (f) {
+        if (!f) {
+            return false;
+        }
+
+        return File.from(f).isFile();
     }
 
     /**
@@ -154,7 +205,7 @@ class File {
     }
 
     //-----------------------------------------------------------------
-    // Methods
+    // Path calculation
 
     absolutePath () {
         return Path.resolve(this.path);
@@ -170,51 +221,6 @@ class File {
 
     canonicalize () {
         return File.from(this.canonicalPath());
-    }
-
-    contains (subPath) {
-        subPath = File.from(subPath);
-
-        if (subPath) {
-            // Ensure we don't have trailing slashes ("/foo/bar/" => "/foo/bar")
-            let a = this.slashify().unterminatedPath();
-            let b = subPath.slashifiedPath();
-
-            if (a.startsWith(b)) {
-                // a = "/foo/bar"
-                // b = "/foo/bar/zip" ==> true
-                // b = "/foo/barf"    ==> false
-                return b[a.length] === '/';
-            }
-        }
-
-        return false;
-    }
-
-    equals (other) {
-        other = File.from(other);
-
-        // Treat "/foo/bar" and "/foo/bar/" as equal (by stripping trailing delimiters)
-        let a = this.unterminatedPath();
-        let b = other && other.unterminatedPath() || '';
-
-        // If the platform has case-insensitive file names, ignore case...
-        if (!File.CASE) {
-            a = a.toLowerCase();
-            b = b.toLowerCase();
-        }
-
-        return a === b;
-    }
-    
-    isAbsolute () {
-        var p = this.path;
-        return p && Path.isAbsolute(p);
-    }
-
-    isRelative () {
-        var p = this.path;
-        return p && !Path.isAbsolute(p);
     }
 
     joinPath (...parts) {
@@ -290,28 +296,6 @@ class File {
         return File.split(this);
     }
 
-    stat () {
-        // if (File.WIN) {
-        //     return Win.dir(this.path).then(stats => {
-        //         console.log('stats:', stats);
-        //         return stats[0];
-        //     });
-        // }
-
-        return Fs.statSync(this.path);
-    }
-
-    statLink () {
-        // if (File.WIN) {
-        //     return Win.dir(this.path).then(stats => {
-        //         console.log('stats:', stats);
-        //         return stats[0];
-        //     });
-        // }
-
-        return Fs.lstatSync(this.path);
-    }
-
     toString () {
         return this.path;
     }
@@ -355,9 +339,189 @@ class File {
         return File.from(this.unterminatedPath());
     }
 
-    //------------------------------------------------------------------
+    //-----------------------------------------------------------------
+    // Path checks
 
-    getStat () {
+    contains (subPath) {
+        subPath = File.from(subPath);
+
+        if (subPath) {
+            // Ensure we don't have trailing slashes ("/foo/bar/" => "/foo/bar")
+            let a = this.slashify().unterminatedPath();
+            let b = subPath.slashifiedPath();
+
+            if (a.startsWith(b)) {
+                // a = "/foo/bar"
+                // b = "/foo/bar/zip" ==> true
+                // b = "/foo/barf"    ==> false
+                return b[a.length] === '/';
+            }
+        }
+
+        return false;
+    }
+
+    equals (other) {
+        other = File.from(other);
+
+        // Treat "/foo/bar" and "/foo/bar/" as equal (by stripping trailing delimiters)
+        let a = this.unterminatedPath();
+        let b = other && other.unterminatedPath() || '';
+
+        // If the platform has case-insensitive file names, ignore case...
+        if (!File.CASE) {
+            a = a.toLowerCase();
+            b = b.toLowerCase();
+        }
+
+        return a === b;
+    }
+
+    isAbsolute () {
+        var p = this.path;
+        return p && Path.isAbsolute(p);
+    }
+
+    isRelative () {
+        var p = this.path;
+        return p && !Path.isAbsolute(p);
+    }
+
+    //-----------------------------------------------------------------
+    // File system checks
+
+    access () {
+        var st = this.stat(true);
+
+        if (st === null) {
+            return null;
+        }
+
+        let mask = st.mode & File.RWX.mask;
+        return ACCESS[mask];
+    }
+
+    exists () {
+        var st = this.stat(true);
+        return st !== null;
+    }
+
+    has (sub) {
+        var f = this.join(sub);
+        return f.exists();
+    }
+
+    hasDir (sub) {
+        var f = this.join(sub);
+
+        return f.isDir();
+    }
+
+    hasFile (sub) {
+        var f = this.join(sub);
+
+        return f.isFile();
+    }
+
+    stat (nothrow) {
+        // if (File.WIN) {
+        //     return Win.dir(this.path).then(stats => {
+        //         console.log('stats:', stats);
+        //         return stats[0];
+        //     });
+        // }
+
+        if (nothrow) {
+            try {
+                return Fs.statSync(this.path);
+            }
+            catch (e) {
+                return null;
+            }
+        }
+
+        return Fs.statSync(this.path);
+    }
+
+    statLink (nothrow) {
+        // if (File.WIN) {
+        //     return Win.dir(this.path).then(stats => {
+        //         console.log('stats:', stats);
+        //         return stats[0];
+        //     });
+        // }
+
+        if (nothrow) {
+            try {
+                return Fs.lstatSync(this.path);
+            }
+            catch (e) {
+                return null;
+            }
+        }
+
+        return Fs.lstatSync(this.path);
+    }
+
+    up (sub) {
+        let p = this.parent;
+
+        if (p && sub) {
+            p = p.where(sub);
+        }
+
+        return p;
+    }
+
+    upDir (sub) {
+        return this.up(parent => parent.hasDir(sub));
+    }
+
+    upFile (sub) {
+        return this.up(parent => parent.hasFile(sub));
+    }
+
+    where (sub) {
+        let test = (typeof sub === 'string') ? (p => p.has(sub)) : sub;
+
+        for (let parent = this; parent; parent = parent.parent) {
+            if (test(parent)) {
+                return parent;
+            }
+        }
+
+        return null;
+    }
+
+    whereDir (sub) {
+        return this.where(parent => parent.hasDir(sub));
+    }
+
+    whereFile (sub) {
+        return this.where(parent => parent.hasFile(sub));
+    }
+
+    //------------------------------------------------------------------
+    // File system checks (async)
+
+    getAccess () {
+        return this.getStat(true).then(st => {
+            if (st === null) {
+                return null;
+            }
+
+            let mask = st.mode & File.RWX.mask;
+            return ACCESS[mask];
+        });
+    }
+
+    getExists () {
+        return this.getStat(true).then(st => {
+            return st !== null;
+        });
+    }
+
+    getStat (noreject) {
         // if (File.WIN) {
         //     return Win.dir(this.path).then(stats => {
         //         console.log('stats:', stats);
@@ -367,11 +531,37 @@ class File {
 
         return new Promise((resolve, reject) => {
             Fs.stat(this.path, (err, stats) => {
-                if (err) {
-                    reject(err);
+                if (!err) {
+                    resolve(stats);
+                }
+                else if (noreject) {
+                    resolve(null);
                 }
                 else {
+                    reject(err);
+                }
+            });
+        });
+    }
+
+    getStatLink (noreject) {
+        // if (File.WIN) {
+        //     return Win.dir(this.path).then(stats => {
+        //         console.log('stats:', stats);
+        //         return stats[0];
+        //     });
+        // }
+
+        return new Promise((resolve, reject) => {
+            Fs.lstat(this.path, (err, stats) => {
+                if (!err) {
                     resolve(stats);
+                }
+                else if (noreject) {
+                    resolve(null);
+                }
+                else {
+                    reject(err);
                 }
             });
         });
@@ -396,29 +586,107 @@ File.MAC = /^darwin$/i.test(platform);
 
 File.CASE = !File.WIN && !File.MAC;
 
+File.isDirectory = File.isDir;
 File.re = re;
 File.separator = Path.sep;
 
-function addTypeTest (name, statMethod) {
-    let prop = '_' + name;
+//--------------------
+
+const ACCESS = File.ACCESS = {
+    rwx: {
+        name: 'rwx',
+
+        r: true,
+        w: true,
+        x: true,
+
+        rw: true,
+        rx: true,
+        wx: true,
+
+        rwx: true,
+
+        mask: Fs.constants.R_OK | Fs.constants.W_OK | Fs.constants.X_OK
+    }
+};
+
+ACCESS[ACCESS.rwx.mask] = ACCESS.RWX = File.RWX = ACCESS.rwx;
+
+[Fs.constants.R_OK, Fs.constants.W_OK, Fs.constants.X_OK].forEach((mask, index, array) => {
+    let c = 'rwx'[index];
+    let obj = ACCESS[c] = ACCESS[c.toUpperCase()] = File[c.toUpperCase()] = {
+        name: c,
+
+        r: c === 'r',
+        w: c === 'w',
+        x: c === 'x',
+
+        rw: false,
+        rx: false,
+        wx: false,
+
+        rwx: false,
+
+        mask: mask
+    };
+
+    ACCESS[obj.mask] = obj;
+    Object.freeze(obj);
+
+    for (let i = index + 1; i < array.length; ++i) {
+        let c2 = 'rwx'[i];
+        let key = c + c2; // rw, rx and wx
+        let KEY = key.toUpperCase();
+        let obj2 = ACCESS[key] = ACCESS[KEY] = File[KEY] = Object.assign({}, obj);
+
+        obj2[c2] = obj2[key] = true;
+        obj2.name = key;
+        obj2.mask |= array[i];
+
+        ACCESS[obj2.mask] = obj2;
+
+        Object.freeze(obj2);
+    }
+});
+
+Object.freeze(ACCESS.rwx);
+Object.freeze(ACCESS);
+
+//--------------------
+
+function addTypeTest (name, statMethod, statMethodAsync) {
+    const prop = '_' + name;
 
     statMethod = statMethod || 'stat';
+    statMethodAsync = statMethodAsync || 'getStat';
     proto[prop] = null;
+
+    proto['get' + name[0].toUpperCase() + name.substr(1)] = function () {
+        let value = this[prop];
+
+        if (value !== null) {
+            return Promise.resolve(value);
+        }
+
+        return this[statMethodAsync](true).then(stat => {
+            return this[prop] = (stat ? stat[name]() : false);
+        });
+    };
 
     return proto[name] = function () {
         let value = this[prop];
 
         if (value === null) {
-            let stat = this[statMethod]();
+            let stat = this[statMethod](true);
 
-            this[prop] = value = stat[name]();
+            this[prop] = value = (stat ? stat[name]() : false);
         }
 
         return value;
     };
 }
 
-proto.isLink = addTypeTest('isSymbolicLink', 'statLink');
+addTypeTest('isSymbolicLink', 'statLink');
 
 [
     'isBlockDevice', 'isCharacterDevice', 'isDirectory', 'isFile', 'isFIFO',
@@ -426,6 +694,8 @@ proto.isLink = addTypeTest('isSymbolicLink', 'statLink');
 ].forEach(fn => addTypeTest(fn));
 
 proto.isDir = proto.isDirectory;
+proto.isSymLink = proto.isSymbolicLink;
+proto.getIsSymLink = proto.getIsSymbolicLink;
 
 //------------------------------------------------------------
 
@@ -513,7 +783,16 @@ module.exports = File;
 
 //------------------------------------------------------------
 
-var f = File.from(process.cwd());
+var f = File.cwd();
 
-console.log('The stat: ', f.stat());
-console.log(`is: file=${f.isFile()} dir=${f.isDirectory()}`);
+console.log(f);
+console.log(f.exists());
+console.log(f.access().name);
+
+f = f.whereDir('.git');
+console.log('Where is .git: ', f);
+console.log(File.exists(f));
+console.log(File.access(f));
+
+//console.log('The stat: ', f.stat());
+console.log(`is: file=${File.isFile(f)} dir=${File.isDirectory(f)}`);
