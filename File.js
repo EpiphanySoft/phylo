@@ -891,38 +891,77 @@ const dateParts = [
     'mtime'
 ];
 
+//              attrib    ctime  atime  mtime  size   name
+//              [1]       [2]    [3]    [4]    [5]    [6]
+re.statLine = /^([A-Z]+)\t(\d+)\t(\d+)\t(\d+)\t(\d+)\t(.+)$/;
+
 class Win {
     static dir (path) {
-        return Win.run('dir', path).then(lines => {
-            let content = lines.filter(line => !!line);
-            return content.map(Win.parseStat);
-        });
+        let lines = this.run('dir', path);
+
+        return Win.parseStats(lines);
     }
 
     static parseStat (text) {
-        // attr/ctime/atime/mtime/size/name
-        // [0]  [1]   [2]   [3]   [4]  [5]
-        let parts = text.split('/');
-        let stat = new Fs.Stats();
+        let parts = re.statLine.exec(text);
+        let stat = parts && new Fs.Stats();
 
-        for (let i = 0; i < dateParts.length; ++i) {
-            let d = new Date();
+        if (parts) {
+            for (let i = 0; i < dateParts.length; ++i) {
+                let d = new Date();
 
-            d.setTime(+parts[i+1] * 1000); // millisec
+                d.setTime(+parts[i + 2] * 1000); // millisec
 
-            stat[dateParts[i]] = d;
+                stat[dateParts[i]] = d;
+            }
+
+            stat.nlink = 1;
+            stat.ino = stat.uid = stat.gid = stat.rdev = 0;
+
+            stat.attribs = parts[1];
+            stat.ctime = stat.mtime;  // no ctime on Windows
+            stat.path = parts[6];
+            stat.size = +parts[5];
         }
-
-        stat.attribs = parts[0];
-        stat.ctime = stat.mtime;  // no ctime on Windows
-        stat.path = parts[5];
-        stat.size = +parts[4];
-
+/*
+ dev: -760113522,
+  mode: 16822,
+  blksize: undefined,
+  size: 0,
+  blocks: undefined,
+ */
         return stat;
+    }
+
+    static parseStats (lines) {
+        let content = lines.filter(line => !!line);
+        return content.map(Win.parseStat);
     }
 
     static run (...args) {
         return Win.spawn(Win.exe, ...args);
+    }
+
+    static spawn (cmd, ...args) {
+        var process = ChildProcess.spawnSync(cmd, args, { encoding: 'utf8' });
+
+        if (process.error) {
+            throw process.error;
+        }
+
+        if (process.status) {
+            throw new Error(`Failed to perform "${args.join(" ")}" (code ${process.exitCode})`);
+        }
+
+        let lines = process.stdout.toString().trim();
+
+        return lines ? lines.split('\r\n') : [];
+    }
+}
+
+class AsyncWin extends Win {
+    static dir (path) {
+        return this.run('dir', path).then(lines => Win.parseStats(lines));
     }
 
     static spawn (cmd, ...args) {
@@ -945,7 +984,7 @@ class Win {
             process.on('close', (code, signal) => {
                 console.log(`${cmd} ${args.join(" ")}:`, lines, ` (exit ${process.exitCode})`);
                 if (process.exitCode) {
-                    resolve(process.exitCode);
+                    reject(new Error(`Failed to perform "${args.join(" ")}" (code ${process.exitCode})`));
                 }
                 else {
                     resolve(lines.trim().split('\r\n'));
@@ -958,6 +997,7 @@ class Win {
 if (File.WIN) {
     Win.exe = Path.resolve(__dirname, 'bin/phylo.exe');
 
+    File.AsyncWin = AsyncWin;
     File.Win = Win;
 
     console.log(`File.Win.exe = ${Win.exe}`);
@@ -971,9 +1011,12 @@ module.exports = File;
 
 var f = File.cwd();
 
+console.log('dir:', Win.dir(f.path));
+
 console.log(f);
 console.log(f.exists());
 console.log(f.access().name);
+console.log(f.stat());
 
 f = f.whereDir('.git');
 console.log('Where is .git: ', f);

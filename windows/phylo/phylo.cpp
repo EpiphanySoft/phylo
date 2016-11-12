@@ -2,9 +2,25 @@
 //
 #include "stdafx.h"
 
+void clear (void * buffer, int n) {
+	char * pb = (char *)buffer;
+
+	for (int i = 0; i < n; ++i) {
+		*pb++ = 0;
+	}
+}
+
+#define ZERO(obj) clear(&obj, sizeof obj)
+
 static void puts (const wchar_t * text) {
 	DWORD out;
-	WriteConsole(GetStdHandle(STD_OUTPUT_HANDLE), text, lstrlen(text), &out, NULL);
+	
+	auto needed = WideCharToMultiByte(CP_UTF8, 0, text, -1, NULL, 0, NULL, NULL);
+	char * buf = static_cast<char *>(HeapAlloc(GetProcessHeap(), 0, needed + 1));
+	WideCharToMultiByte(CP_UTF8, 0, text, -1, buf, needed, NULL, NULL);
+
+	WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), buf, lstrlenA(buf), &out, NULL);
+	//WriteConsole(GetStdHandle(STD_OUTPUT_HANDLE), text, lstrlen(text), &out, NULL);
 }
 
 #define WINDOWS_TICK 10000000
@@ -19,16 +35,6 @@ unsigned FileTimeToPOSIX(FILETIME ft) {
 
 wchar_t buf[2048];
 const int CCH = sizeof buf / sizeof buf[0];
-
-void clear(void * buffer, int n) {
-	char * pb = (char *)buffer;
-
-	for (int i = 0; i < n; ++i) {
-		*pb++ = 0;
-	}
-}
-
-#define ZERO(obj) clear(&obj, sizeof obj)
 
 void printFile(const WIN32_FIND_DATA & data) {
 	wchar_t attribs[16];
@@ -90,7 +96,7 @@ void printFile(const WIN32_FIND_DATA & data) {
 
 	attribs[i] = 0;
 
-	int n = wnsprintf(buf, CCH - 1, L"%s/%d/%d/%d/%lld/%ls\n",
+	int n = wnsprintf(buf, CCH - 1, L"%s\t%d\t%d\t%d\t%lld\t%ls\n",
 		attribs,
 		FileTimeToPOSIX(data.ftCreationTime),
 		FileTimeToPOSIX(data.ftLastAccessTime),
