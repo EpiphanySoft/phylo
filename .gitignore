@@ -1,8 +1,9 @@
 /.idea
+/windows/phylo/.vs
+/windows/phylo/ipch/
 node_modules
 bin/phylo.i*
 bin/phylo.pdb
 phylo.VC.*
-phylo.vcx*
-/windows/phylo/.vs
-/windows/phylo/ipch/
+phylo.*.filters
+phylo.*.user
