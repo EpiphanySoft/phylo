@@ -11,6 +11,99 @@ const re = {
 };
 
 /**
+ * @class FileAccess
+ * This class contains useful boolean properties that categories file access. This makes
+ * for shorter code then use of `fs.constants.R_OK` and related masks.
+ *
+ *      // path is a string path
+ *
+ *      let mode = fs.statSync(path).mode;
+ *
+ *      if (mode & fs.constants.R_OK && mode & fs.constants.W_OK) {
+ *          // path is R and W
+ *      }
+ *      // else path is missing R and/or W
+ *
+ *      // or
+ *
+ *      try {
+ *          fs.accessSync(path, fs.constants.R_OK | fs.constants.W_OK);
+ *
+ *          // path is R and W
+ *      }
+ *      catch (e) {
+ *          // path is missing R and/or W
+ *      }
+ *
+ * Or using `File`:
+ *
+ *      // file is a File instance
+ *
+ *      if (file.access().rw) {
+ *          // file is R and W
+ *      }
+ *      // else file is missing R and/or W
+ *
+ * Or:
+ *
+ *      // file is a File instance
+ *
+ *      if (file.can('rw')) {
+ *          // file is R and W
+ *      }
+ *      // else file is missing R and/or W
+ */
+
+/**
+ * @property {Number} mask
+ * @readonly
+ * This property holds the bit-wise OR of the available access modes `fs.constants.R_OK`,
+ *  `fs.constants.W_OK` and/or  `fs.constants.X_OK`.
+ */
+/**
+ * @property {"r"/"rw"/"rwx"/"w"/"wx"/"x"} name
+ * @readonly
+ * This string holds the available access modes as single letters.
+ */
+/**
+ * @property {Boolean} r
+ * @readonly
+ * This property is `true` if the file can be read.
+ */
+/**
+ * @property {Boolean} rw
+ * @readonly
+ * This property is `true` if the file can be read and written.
+ */
+/**
+ * @property {Boolean} rx
+ * @readonly
+ * This property is `true` if the file can be read and executed.
+ */
+/**
+ * @property {Boolean} rwx
+ * @readonly
+ * This property is `true` if the file can be read, written and executed.
+ */
+/**
+ * @property {Boolean} w
+ * @readonly
+ * This property is `true` if the file can be written.
+ */
+/**
+ * @property {Boolean} wx
+ * @readonly
+ * This property is `true` if the file can be written and executed.
+ */
+/**
+ * @property {Boolean} x
+ * @readonly
+ * This property is `true` if the file can be executed.
+ */
+
+//================================================================================
+
+/**
  * This class wraps a path to a file or directory and provides methods to ease processing
  * and operating on that path.
  *
@@ -38,26 +131,47 @@ const re = {
  *      });
  */
 class File {
-    static access (f) {
-        if (!f) {
+    /**
+     * Returns the `FileAccess` object describing the access modes available for the
+     * specified file. This will be `null` if the file does not exist.
+     *
+     * @param {String/File} file The `File` instance of path as a string.
+     * @return {FileAccess}
+     */
+    static access (file) {
+        if (!file) {
             return null;
         }
 
-        return File.from(f).access();
+        return File.from(file).access();
     }
 
+    /**
+     * Returns the `process.cwd()` as a `File` instance.
+     * @return {File} The `process.cwd()` as a `File` instance.
+     */
     static cwd () {
         return new File(process.cwd());
     }
 
-    static exists (f) {
-        if (!f) {
+    /**
+     * Returns `true` if the specified file exists, `false` if not.
+     * @param {String/File} file The `File` or path to test for existence.
+     * @return {Boolean} `true` if the file exists.
+     */
+    static exists (file) {
+        if (!file) {
             return false;
         }
 
-        return File.from(f).exists();
+        return File.from(file).exists();
     }
 
+    /**
+     * Returns a `File` for the specified path (if it is not already a `File`).
+     * @param {String/File} path The `File` or path to convert to a `File`.
+     * @return {File} The `File` instance.
+     */
     static from (path) {
         var file = path || null;
 
@@ -68,20 +182,30 @@ class File {
         return file;
     }
 
-    static isDir (f) {
-        if (!f) {
+    /**
+     * Returns `true` if the specified path is a directory, `false` if not.
+     * @param {String/File} file The `File` or path to test.
+     * @return {Boolean}
+     */
+    static isDir (file) {
+        if (!file) {
             return false;
         }
 
-        return File.from(f).isDir();
+        return File.from(file).isDir();
     }
 
-    static isFile (f) {
-        if (!f) {
+    /**
+     * Returns `true` if the specified path is a file, `false` if not.
+     * @param {String/File} file The `File` or path to test.
+     * @return {Boolean}
+     */
+    static isFile (file) {
+        if (!file) {
             return false;
         }
 
-        return File.from(f).isFile();
+        return File.from(file).isFile();
     }
 
     /**
@@ -117,6 +241,11 @@ class File {
         return ret || '';
     }
 
+    /**
+     * Returns the path as a string given a `File` or string.
+     * @param {String/File} file
+     * @return {String}
+     */
     static path (file) {
         return ((file && file.$isFile) ? file.path : file) || '';
     }
@@ -150,11 +279,20 @@ class File {
         return (parts && parts.length && Path.resolve(...parts)) || '';
     }
 
+    /**
+     * Splits the given `File` or path into an array of parts.
+     * @param {String/File} filePath
+     * @return {String[]}
+     */
     static split (filePath) {
         let path = File.path(filePath);
         return path.split(re.split);
     }
 
+    /**
+     * Initialize an instance given one or more path fragments.
+     * @param {File/String...} parts
+     */
     constructor (...parts) {
         this.path = File.joinPath(...parts);
     }
@@ -390,6 +528,11 @@ class File {
     //-----------------------------------------------------------------
     // File system checks
 
+    /**
+     * Returns a `FileAccess` object describing the access available for this file. If the
+     * file does not exist, `null` is returned.
+     * @return {FileAccess}
+     */
     access () {
         var st = this.stat(true);
 
@@ -398,31 +541,67 @@ class File {
         }
 
         let mask = st.mode & File.RWX.mask;
-        return ACCESS[mask];
+        return ACCESS[mask] || null;
     }
 
+    /**
+     * Returns `true` if the desired access is available for this file.
+     * @param {"r"/"rw"/"rx"/"rwx"/"w"/"wx"/"x"} mode
+     * @return {Boolean}
+     */
+    can (mode) {
+        var acc = this.access();
+
+        return acc ? acc[mode] : false;
+    }
+
+    /**
+     * Returns `true` if this file exists, `false` if not.
+     * @return {Boolean}
+     */
     exists () {
         var st = this.stat(true);
         return st !== null;
     }
 
-    has (sub) {
-        var f = this.join(sub);
+    /**
+     * Returns `true` if the specified `rel` path exists relative to this path.
+     * @param {String} rel A path relative to this path.
+     * @return {Boolean}
+     */
+    has (rel) {
+        var f = this.resolve(rel);
         return f.exists();
     }
 
-    hasDir (sub) {
-        var f = this.join(sub);
+    /**
+     * Returns `true` if the specified `rel` directory exists relative to this path.
+     * @param {String} rel A path relative to this path.
+     * @return {Boolean}
+     */
+    hasDir (rel) {
+        var f = this.resolve(rel);
 
         return f.isDir();
     }
 
-    hasFile (sub) {
-        var f = this.join(sub);
+    /**
+     * Returns `true` if the specified `rel` file exists relative to this path.
+     * @param {String} rel A path relative to this path.
+     * @return {Boolean}
+     */
+    hasFile (rel) {
+        var f = this.join(rel);
 
         return f.isFile();
     }
 
+    /**
+     * Return the `[fs.Stats](https://nodejs.org/api/fs.html#fs_class_fs_stats)`
+     * @param {Boolean} [nothrow] Pass `true` to return `null` on failure instead of
+     * throwing an `Error`.
+     * @return {fs.Stats}
+     */
     stat (nothrow) {
         // if (File.WIN) {
         //     return Win.dir(this.path).then(stats => {
@@ -443,6 +622,13 @@ class File {
         return Fs.statSync(this.path);
     }
 
+    /**
+     * Return the `[fs.Stats](https://nodejs.org/api/fs.html#fs_class_fs_stats)` for a
+     * (potentially) symbolic link.
+     * @param {Boolean} [nothrow] Pass `true` to return `null` on failure instead of
+     * throwing an `Error`.
+     * @return {fs.Stats}
+     */
     statLink (nothrow) {
         // if (File.WIN) {
         //     return Win.dir(this.path).then(stats => {
