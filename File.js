@@ -5,6 +5,8 @@ const OS = require('os');
 const Path = require('path');
 const ChildProcess = require('child_process');
 
+const platform = OS.platform();
+
 const re = {
     slash: /\\/g,
     split: /[\/\\]/g
@@ -183,6 +185,16 @@ class File {
     }
 
     /**
+     * Returns the `os.homedir()` as a `File` instance. On Windows, this is something
+     * like `"C:\Users\Name"`.
+     *
+     * @return {File} The `os.homedir()` as a `File` instance.
+     */
+    static home () {
+        return new File(OS.homedir());
+    }
+
+    /**
      * Returns `true` if the specified path is a directory, `false` if not.
      * @param {String/File} file The `File` or path to test.
      * @return {Boolean}
@@ -248,6 +260,36 @@ class File {
      */
     static path (file) {
         return ((file && file.$isFile) ? file.path : file) || '';
+    }
+
+    /**
+     * Returns the folder into which applications should save data for their users. For
+     * example, on Windows this would be `"C:\Users\Name\AppData\Roaming\Company"` where
+     * "Name" is the user's name and "Company" is the owner of the data (typically the
+     * name of the company producing the application).
+     *
+     * This location is platform-specific:
+     *
+     *  - Windows:  C:\Users\Name\AppData\Roaming\Company
+     *  - Mac OS X: /Users/Name/Library/Application Support/Company
+     *  - Linux:    /home/name/.local/share/data/company
+     *  - Default:  /home/name/.company
+     *
+     * The set of recognized platforms for profile locations is found in `profilers`.
+     *
+     * @param {String} company The name of the application's producer.
+     * @return {File}
+     */
+    static profile (company) {
+        company = company || File.COMPANY;
+
+        if (!company) {
+            throw new Error('Must provide company name to isolate profile data');
+        }
+
+        var fn = File.profilers[platform] || File.profilers.default;
+
+        return fn(File.home(), company);
     }
 
     /**
@@ -765,8 +807,6 @@ Object.assign(proto, {
     _parent: undefined
 });
 
-const platform = OS.platform();
-
 File.WIN = /^win\d\d$/i.test(platform);
 File.MAC = /^darwin$/i.test(platform);
 
@@ -775,6 +815,26 @@ File.CASE = !File.WIN && !File.MAC;
 File.isDirectory = File.isDir;
 File.re = re;
 File.separator = Path.sep;
+
+File.profilers = {
+    default (home, company) {
+        return home.join(`.${company.toLowerCase()}`);
+    },
+
+    darwin (home, company) {
+        return home.join(`Library/Application Support/${company}`);
+    },
+
+    linux (home, company) {
+        return home.join(`.local/share/data/${company.toLowerCase()}`);
+    },
+
+    win32 (home, company) {
+        return File.join(process.env.APPDATA || process.env.LOCALAPPDATA ||
+                         home.join('AppData\\Roaming'), `${company}`);
+
+    }
+};
 
 //--------------------
 
@@ -959,7 +1019,7 @@ class Win {
     }
 }
 
-class AsyncWin extends Win {
+class WinAsync extends Win {
     static dir (path) {
         return this.run('dir', path).then(lines => Win.parseStats(lines));
     }
@@ -997,8 +1057,8 @@ class AsyncWin extends Win {
 if (File.WIN) {
     Win.exe = Path.resolve(__dirname, 'bin/phylo.exe');
 
-    File.AsyncWin = AsyncWin;
     File.Win = Win;
+    File.WinAsync = WinAsync;
 
     console.log(`File.Win.exe = ${Win.exe}`);
 }
@@ -1010,6 +1070,9 @@ module.exports = File;
 //------------------------------------------------------------
 
 var f = File.cwd();
+
+console.log(`home: ${File.home()}`);
+console.log(`profile: ${File.profile('Acme')}`);
 
 console.log('dir:', Win.dir(f.path));
 
