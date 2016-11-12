@@ -1,5 +1,6 @@
 /.idea
 /windows/phylo/.vs
+/windows/phylo/Release
 /windows/phylo/ipch/
 node_modules
 bin/phylo.i*
