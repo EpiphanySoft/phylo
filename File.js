@@ -794,7 +794,57 @@ class File {
             });
         });
     }
+
+    //-----------------------------------------------------------------
+    // File I/O
+
+    getLoader (options) {
+        let ext = this.extent;  // eg "json" or "png"
+    }
+
+    load (options) {
+        //
+    }
+
+    asyncLoad (options) {
+        return new Promise((resolve, reject) => {
+            //
+        });
+    }
 }
+
+File.loaders = {
+    binary: {
+        options: {},
+
+        parser (data) {
+            return data;
+        }
+    },
+
+    text: {
+        options: {
+            encoding: 'utf8'
+        },
+
+        reader (filename, options) {
+            
+        },
+
+        parser (data) {
+            return data;
+        }
+    }
+};
+
+['json'].forEach(ext => {
+    File.loaders[ext] = {
+        reader: File.loaders.text;
+    };
+});
+
+File.loaders.bin = File.loaders.binary;
+File.loaders.txt = File.loaders.text;
 
 const proto = File.prototype;
 
