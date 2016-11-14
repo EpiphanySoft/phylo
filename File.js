@@ -1378,18 +1378,22 @@ class File {
      *      // lists all files and cache stat info:
      *      dir.list('As');
      *
+     *      // lists all files and cache stat info but do not sort:
+     *      dir.list('As-o');
+     *
      * The valid options are:
      *
      *  - **A** All files are listed, even hidden files. (default is `false`)
-     *  - **a** Include Windows attributes information (e.g., 'HRA'). (default is `true`
+     *  - **a** Include Windows attribute information (e.g., 'HRA'). (default is `true`
      *   but only applies if **l** or **s** are enabled)
      *  - **d** List only directories. (default is `false`)
      *  - **f** List only files (non-directories). (default is `false`)
      *  - **l** Cache the result of `statLink` for each file. (default is `false`)
-     *  - **o** Order (as in "sort") the items. (default is `true`)
+     *  - **o** Order the items by `sorter`. (default is `true`)
      *  - **s** Cache the result of `stat` for each file. (default is `false`)
      *  - **w** Indicates that Windows hidden flag alone determines hidden status
-     *   (default is `false` so that files names starting with dots are hidden).
+     *   (default is `false` so that files names starting with dots are hidden on all
+     *   platforms).
      *
      * @param {String} mode A string containing the mode characters described above.
      * @return {File[]}
