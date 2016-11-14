@@ -1111,7 +1111,7 @@ class File {
 
         let path = this.path;
 
-        return _async('_asyncStat', () => {
+        return this._async('_asyncStat', () => {
             return new Promise((resolve, reject) => {
                 Fs.stat(path, (err, stats) => {
                     if (err) {
@@ -1170,7 +1170,7 @@ class File {
 
         let path = this.path;
 
-        return _async('_asyncStatLink', () => {
+        return this._async('_asyncStatLink', () => {
             return new Promise((resolve, reject) => {
                 Fs.lstat(path, (err, stats) => {
                     if (err) {
@@ -1207,7 +1207,33 @@ class File {
     //-----------------------------------------------------------------
     // Directory Listing
 
-    // TODO asyncList (mode) {}
+    _parseListMode (mode) {
+        var options = this._parseMode({
+            A: false,
+            a: true,
+            d: false,
+            f: false,
+            l: false,
+            o: true,
+            s: false,
+            w: false
+        }, mode);
+
+        options.hideDots = File.Win ? !options.w : true;
+        options.cachify = options.l || options.s;
+        options.statify = options.s || options.f || options.d;
+
+        if (!options.s && !options.l) {
+            options.a = false;
+        }
+
+        if (File.Win && (!options.A || options.a)) {
+            // To filter hidden files on Windows, we need attributes
+            options.attribs = true;
+        }
+
+        return options;
+    }
 
     _parseMode (flags, mode) {
         let enable = null;
@@ -1233,6 +1259,102 @@ class File {
         }
 
         return flags;
+    }
+
+    asyncList (mode) {
+        var options = this._parseListMode(mode);
+
+        return new Promise((resolve, reject) => {
+            var fail = e => {
+                if (reject) {
+                    reject(e);
+                    reject = null;
+                }
+            };
+            var finish = () => {
+                reject = null;
+
+                if (options.f) {
+                    result = result.filter(f => !f._stat.isDirectory());
+                }
+                else if (options.d) {
+                    result = result.filter(f => f._stat.isDirectory());
+                }
+
+                if (!options.A) {
+                    result = result.filter(f => {
+                        let name = f.name;
+
+                        if (options.hideDots && name[0] === '.') {
+                            return false;
+                        }
+
+                        let attrib = attribMap && attribMap[name] || '';
+
+                        return attrib.indexOf('H') < 0;
+                    });
+                }
+
+                result.forEach(f => {
+                    if (options.cachify) {
+                        if (attribMap) {
+                            f._stat.attribs = attribMap[f.name] || '';
+                        }
+                    }
+                    else {
+                        f._stat = null;
+                    }
+                });
+
+                if (options.o) {
+                    result.sort(File.sorter);
+                }
+
+                resolve(result);
+            };
+
+            var attribMap, result = [];
+
+            Fs.readdir(this.path, (err, names) => {
+                if (err) {
+                    reject(err);
+                    return;
+                }
+
+                var promises = [];
+
+                if (options.attribs) {
+                    promises.push(WinAsync.attribMap(this.join('*').path).then(a => {
+                        attribMap = a;
+                    },
+                    fail));
+                }
+
+                names.forEach(name => {
+                    let f = new File(this, name);
+
+                    result.push(f);
+
+                    if (options.l) {
+                        promises.push(f.asyncStatLink(false, true).then(st => {
+                            f._stat = st;
+                        }));
+                    }
+                    else if (options.statify) {
+                        promises.push(f.asyncStat(false, true).then(st => {
+                            f._stat = st;
+                        }));
+                    }
+                });
+
+                if (promises.length) {
+                    Promise.all(promises).then(finish, fail);
+                }
+                else {
+                    finish();
+                }
+            });
+        });
     }
 
     /**
@@ -1273,38 +1395,17 @@ class File {
      * @return {File[]}
      */
     list (mode) {
+        var options = this._parseListMode(mode);
         var names = Fs.readdirSync(this.path);
-        var options = this._parseMode({
-            A: false,
-            a: true,
-            d: false,
-            f: false,
-            l: false,
-            o: true,
-            s: false,
-            w: false
-        }, mode);
-        var hideDots = File.Win ? !options.w : true;
+        var attribMap = options.attribs && Win.attribMap(this.join('*').path);
         var ret = [];
-        var cachify = options.l || options.s;
-        var statify = options.s || options.f || options.d;
-        var attribs;
-
-        if (!options.s && !options.l) {
-            options.a = false;
-        }
-
-        if (File.Win && (!options.A || options.a)) {
-            // To filter hidden files on Windows, we need attributes
-            attribs = Win.attribMap(this.join('*').path);
-        }
 
         for (let i = 0, n = names.length; i < n; ++i) {
             let name = names[i];
-            let attrib = attribs && attribs[name] || '';
+            let attrib = attribMap && attribMap[name] || '';
 
             if (!options.A) {
-                if (hideDots && name[0] === '.') {
+                if (options.hideDots && name[0] === '.') {
                     continue;
                 }
 
@@ -1313,9 +1414,9 @@ class File {
                 }
             }
 
-            let f = new File(name);
+            let f = new File(this, name);
             let st = options.l ? f.statLink(false, true) :
-                        (statify ? f.stat(false, true) : null);
+                        (options.statify ? f.stat(false, true) : null);
 
             if (st) {
                 if (options.f) {
@@ -1329,11 +1430,11 @@ class File {
                     }
                 }
 
-                if (attribs) {
+                if (attribMap) {
                     st.attribs = attrib;
                 }
 
-                if (cachify) {
+                if (options.cachify) {
                     f._stat = st;
                 }
             }
@@ -1785,7 +1886,7 @@ class Win {
     }
 
     static run (...args) {
-        return Win.spawn(Win.exe, ...args);
+        return this.spawn(Win.exe, ...args);
     }
 
     static spawn (cmd, ...args) {
@@ -1878,7 +1979,11 @@ console.log(f);
 console.log(f.exists());
 console.log(f.access().name);
 //console.log(f.stat());
-f.list('s+o').forEach(f => console.log('dir: ', f.path));
+//f.list('s+o').forEach(f => console.log('dir: ', f.path));
+
+f.asyncList('Asd').then(files => {
+    files.forEach(f => console.log('dir: ', f.path));
+});
 
 // let pkg = f.upToFile('package.json');
 // console.log(`package ${pkg}`);
