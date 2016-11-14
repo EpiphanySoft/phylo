@@ -332,6 +332,11 @@ class File {
         return path.split(re.split);
     }
 
+    static sorter (file1, file2) {
+        var a = File.from(file1);
+        return a.compare(file2);
+    }
+
     //-----------------------------------------------------------------
 
     /**
@@ -562,8 +567,26 @@ class File {
         return false;
     }
 
-    equals (other) {
+    compare (other) {
+        if (!other) {
+            return 1;
+        }
+
         other = File.from(other);
+
+        if (this._stat && other._stat) {
+            let p = this.parent;
+
+            if (p.equals(other.parent)) {
+                // Two files in the same parent folder both w/stats
+                let d1 = this._stat.isDirectory();
+                let d2 = other._stat.isDirectory();
+
+                if (d1 !== d2) {
+                    return d1 ? -1 : 1;
+                }
+            }
+        }
 
         // Treat "/foo/bar" and "/foo/bar/" as equal (by stripping trailing delimiters)
         let a = this.unterminatedPath();
@@ -575,7 +598,13 @@ class File {
             b = b.toLowerCase();
         }
 
-        return a === b;
+        return (a < b) ? -1 : ((b < a) ? 1 : 0);
+    }
+
+    equals (other) {
+        let c = this.compare(other);
+
+        return c === 0;
     }
 
     isAbsolute () {
@@ -740,25 +769,29 @@ class File {
      * Use `restat` to ensure a fresh stat from the file-system.
      *
      * @param {Boolean} [strict] Pass `true` to throw exceptions on failure.
+     * @param {Boolean} [skipAttr] (private) Pass `true` to skip Windows attributes.
      * @return {fs.Stats} The stats or `null` if the file does not exist.
      */
-    stat (strict) {
+    stat (strict, skipAttr) {
         let ret = this._stat;
 
         if (!ret) {
-            // if (File.WIN) {
-            //     return Win.dir(this.path).then(stats => {
-            //         console.log('stats:', stats);
-            //         return stats[0];
-            //     });
-            // }
+            let path = this.path;
 
             if (strict) {
-                ret = Fs.statSync(this.path);
+                ret = Fs.statSync(path);
+
+                if (File.Win && !skipAttr) {
+                    ret.attribs = Win.attrib(path)[0];
+                }
             }
             else {
                 try {
-                    ret = Fs.statSync(this.path);
+                    ret = Fs.statSync(path);
+
+                    if (File.Win && !skipAttr) {
+                        ret.attribs = Win.attrib(path)[0];
+                    }
                 }
                 catch (e) {
                     // ignore
@@ -778,25 +811,29 @@ class File {
      * Use `restatLink` to ensure a fresh stat from the file-system.
      *
      * @param {Boolean} [strict] Pass `true` to throw exceptions on failure.
+     * @param {Boolean} [skipAttr] (private) Pass `true` to skip Windows attributes.
      * @return {fs.Stats} The stats or `null` if the file does not exist.
      */
-    statLink (strict) {
+    statLink (strict, skipAttr) {
         let ret = this._stat;
 
         if (!ret) {
-            // if (File.WIN) {
-            //     return Win.dir(this.path).then(stats => {
-            //         console.log('stats:', stats);
-            //         return stats[0];
-            //     });
-            // }
+            let path = this.path;
 
             if (strict) {
-                ret = Fs.lstatSync(this.path);
+                ret = Fs.lstatSync(path);
+
+                if (File.Win && !skipAttr) {
+                    ret.attribs = Win.attrib(path)[0];
+                }
             }
             else {
                 try {
-                    ret = Fs.lstatSync(this.path);
+                    ret = Fs.lstatSync(path);
+
+                    if (File.Win && !skipAttr) {
+                        ret.attribs = Win.attrib(path)[0];
+                    }
                 }
                 catch (e) {
                     // ignore
@@ -1064,31 +1101,44 @@ class File {
      * Use `asyncRestat` to ensure a fresh stat from the file-system.
      *
      * @param {Boolean} [strict] Pass `true` to reject on failure.
+     * @param {Boolean} [skipAttr] (private) Pass `true` to skip Windows attributes.
      * @return {Promise<fs.Stats>} The stats or `null` if the file does not exist.
      */
-    asyncStat (strict) {
+    asyncStat (strict, skipAttr) {
         if (this._stat) {
             return Promise.resolve(this._stat);
         }
 
-        // if (File.WIN) {
-        //     return Win.dir(this.path).then(stats => {
-        //         console.log('stats:', stats);
-        //         return stats[0];
-        //     });
-        // }
+        let path = this.path;
 
         return _async('_asyncStat', () => {
             return new Promise((resolve, reject) => {
-                Fs.stat(this.path, (err, stats) => {
-                    if (!err) {
-                        resolve(stats);
+                Fs.stat(path, (err, stats) => {
+                    if (err) {
+                        if (strict) {
+                            reject(err);
+                        }
+                        else {
+                            resolve(null);
+                        }
                     }
-                    else if (strict) {
-                        reject(err);
+                    else if (File.Win && !skipAttr) {
+                        WinAsync.attrib(path).then(attr => {
+                            stats.attribs = attr;
+                            resolve(stats);
+                        },
+                        err => {
+                            if (strict) {
+                                reject(err);
+                            }
+                            else {
+                                stats.attribs = '';
+                                resolve(stats);
+                            }
+                        });
                     }
                     else {
-                        resolve(null);
+                        resolve(stats);
                     }
                 });
             });
@@ -1110,31 +1160,44 @@ class File {
      * Use `asyncRestatLink` to ensure a fresh stat from the file-system.
      *
      * @param {Boolean} [strict] Pass `true` to reject on failure.
+     * @param {Boolean} [skipAttr] (private) Pass `true` to skip Windows attributes.
      * @return {Promise<fs.Stats>} The stats or `null` if the file does not exist.
      */
-    asyncStatLink (strict) {
+    asyncStatLink (strict, skipAttr) {
         if (this._stat) {
             return Promise.resolve(this._stat);
         }
 
-        return _async('_asyncStatLink', () => {
-            // if (File.WIN) {
-            //     return Win.dir(this.path).then(stats => {
-            //         console.log('stats:', stats);
-            //         return stats[0];
-            //     });
-            // }
+        let path = this.path;
 
+        return _async('_asyncStatLink', () => {
             return new Promise((resolve, reject) => {
-                Fs.lstat(this.path, (err, stats) => {
-                    if (!err) {
-                        resolve(stats);
+                Fs.lstat(path, (err, stats) => {
+                    if (err) {
+                        if (strict) {
+                            reject(err);
+                        }
+                        else {
+                            resolve(null);
+                        }
                     }
-                    else if (strict) {
-                        reject(err);
+                    else if (File.Win && !skipAttr) {
+                        WinAsync.attrib(path).then(attr => {
+                            stats.attribs = attr;
+                            resolve(stats);
+                        },
+                        err => {
+                            if (strict) {
+                                reject(err);
+                            }
+                            else {
+                                stats.attribs = '';
+                                resolve(stats);
+                            }
+                        });
                     }
                     else {
-                        resolve(null);
+                        resolve(stats);
                     }
                 });
             });
@@ -1142,7 +1205,151 @@ class File {
     }
 
     //-----------------------------------------------------------------
-    // File I/O
+    // Directory Listing
+
+    // TODO asyncList (mode) {}
+
+    _parseMode (flags, mode) {
+        let enable = null;
+
+        for (let i = 0, n = mode && mode.length; i < n; ++i) {
+            let c = mode[i];
+
+            if (c === '-' || c === '+') {
+                if (enable === null) {
+                    enable = c === '+';
+                }
+                else {
+                    throw new Error(`Invalid mode modifier "${mode.substr(i-1)}"`);
+                }
+            }
+            else if (!(c in flags)) {
+                throw new Error(`Invalid mode flag "${c}"`);
+            }
+            else {
+                flags[c] = enable !== false;
+                enable = null;
+            }
+        }
+
+        return flags;
+    }
+
+    /**
+     * Returns a listing of items in this directory. The `mode` parameter can be used
+     * to adjust what is reported.
+     *
+     * The `mode` string contains character codes with optional "+" or "-" prefixes to
+     * indicate enabled or disabled. When no prefix is provided, the option is enabled.
+     *
+     * For example:
+     *
+     *      // List non-hidden files:
+     *      dir.list();
+     *
+     *      // lists all items (including hidden):
+     *      dir.list('A');
+     *
+     *      // lists non-hidden files and cache stat info:
+     *      dir.list('s');
+     *
+     *      // lists all files and cache stat info:
+     *      dir.list('As');
+     *
+     * The valid options are:
+     *
+     *  - **A** All files are listed, even hidden files. (default is `false`)
+     *  - **a** Include Windows attributes information (e.g., 'HRA'). (default is `true`
+     *   but only applies if **l** or **s** are enabled)
+     *  - **d** List only directories. (default is `false`)
+     *  - **f** List only files (non-directories). (default is `false`)
+     *  - **l** Cache the result of `statLink` for each file. (default is `false`)
+     *  - **o** Order (as in "sort") the items. (default is `true`)
+     *  - **s** Cache the result of `stat` for each file. (default is `false`)
+     *  - **w** Indicates that Windows hidden flag alone determines hidden status
+     *   (default is `false` so that files names starting with dots are hidden).
+     *
+     * @param {String} mode A string containing the mode characters described above.
+     * @return {File[]}
+     */
+    list (mode) {
+        var names = Fs.readdirSync(this.path);
+        var options = this._parseMode({
+            A: false,
+            a: true,
+            d: false,
+            f: false,
+            l: false,
+            o: true,
+            s: false,
+            w: false
+        }, mode);
+        var hideDots = File.Win ? !options.w : true;
+        var ret = [];
+        var cachify = options.l || options.s;
+        var statify = options.s || options.f || options.d;
+        var attribs;
+
+        if (!options.s && !options.l) {
+            options.a = false;
+        }
+
+        if (File.Win && (!options.A || options.a)) {
+            // To filter hidden files on Windows, we need attributes
+            attribs = Win.attribMap(this.join('*').path);
+        }
+
+        for (let i = 0, n = names.length; i < n; ++i) {
+            let name = names[i];
+            let attrib = attribs && attribs[name] || '';
+
+            if (!options.A) {
+                if (hideDots && name[0] === '.') {
+                    continue;
+                }
+
+                if (attrib.indexOf('H') > -1) {
+                    continue;
+                }
+            }
+
+            let f = new File(name);
+            let st = options.l ? f.statLink(false, true) :
+                        (statify ? f.stat(false, true) : null);
+
+            if (st) {
+                if (options.f) {
+                    if (st.isDirectory()) {
+                        continue;
+                    }
+                }
+                if (options.d) {
+                    if (!st.isDirectory()) {
+                        continue;
+                    }
+                }
+
+                if (attribs) {
+                    st.attribs = attrib;
+                }
+
+                if (cachify) {
+                    f._stat = st;
+                }
+            }
+
+            ret.push(f);
+        }
+
+        if (options.o) {
+            ret.sort(File.sorter);
+        }
+
+        return ret;
+    }
+
+    //-----------------------------------------------------------------
+    // File Loader
 
     asyncLoad (options) {
         let loader = this.getLoader(options);
@@ -1463,11 +1670,82 @@ const dateParts = [
 //              [1]       [2]    [3]    [4]    [5]    [6]
 re.statLine = /^([A-Z]+)\t(\d+)\t(\d+)\t(\d+)\t(\d+)\t(.+)$/;
 
+function Empty () {}
+Empty.prototype = Object.create(null);
+
 class Win {
+    /**
+     * Returns an array of attribute/name pairs. For example:
+     *
+     *      File.Win.attrib('C:\\*');
+     *
+     *      // [
+     *      //     ['D', 'Program Files'],
+     *      //     ['D', 'Users']
+     *      // ]
+     *
+     * @param {String} path
+     * @return {Array[]}
+     */
+    static attrib (path) {
+        let lines = this.run('dir', path);
+
+        return Win.parseAttribs(lines);
+    }
+
+    /**
+     * Returns an object of attributes keyed by filename. For example:
+     *
+     *      File.Win.attrib('C:\\*');
+     *
+     *      // {
+     *      //     'Program Files': 'D',
+     *      //     'Users': 'D'
+     *      // ]
+     *
+     * @param {String} path
+     * @return {Object}
+     */
+    static attribMap (path) {
+        let attribs = this.attrib(path);
+
+        return Win.makeAttribMap(attribs);
+    }
+
     static dir (path) {
         let lines = this.run('dir', path);
 
         return Win.parseStats(lines);
+    }
+
+    static makeAttribMap (attribs) {
+        let map = new Empty();
+
+        for (let i = 0, n = attribs.length; i < n; ++i) {
+            let attr = attribs[i];
+            let name = attr[1];
+
+            if (name !== '__proto__') {
+                map[name] = attr[0];
+            }
+        }
+
+        return map;
+    }
+
+    static parseAttrib (text) {
+        let parts = re.statLine.exec(text);
+
+        if (parts) {
+            return [ parts[1], parts[6] ];
+        }
+
+        return null;
+    }
+
+    static parseAttribs (lines) {
+        let content = lines.filter(line => !!line);
+        return content.map(Win.parseAttrib);
     }
 
     static parseStat (text) {
@@ -1518,16 +1796,26 @@ class Win {
         }
 
         if (process.status) {
-            throw new Error(`Failed to perform "${args.join(" ")}" (code ${process.exitCode})`);
+            throw new Error(`Failed to perform "${args.join(" ")}" (code ${process.status})`);
         }
 
         let lines = process.stdout.toString().trim();
 
-        return lines ? lines.split('\r\n') : [];
+        lines = lines ? lines.split('\r\n') : [];
+
+        return lines;
     }
 }
 
 class WinAsync extends Win {
+    static attrib (path) {
+        return this.run('dir', path).then(lines => Win.parseAttribs(lines));
+    }
+
+    static attribMap (path) {
+        return this.attrib(path).then(attribs => Win.makeAttribMap(attribs));
+    }
+
     static dir (path) {
         return this.run('dir', path).then(lines => Win.parseStats(lines));
     }
@@ -1539,20 +1827,22 @@ class WinAsync extends Win {
 
             process.stdout.on('data', data => {
                 lines += data.toString();
-                console.log('data:', data);
+                //console.log('data:', data);
             });
 
-            process.on('error', function(err) {
-                console.log('error', err);
-            });
-            process.on('exit', function(err) {
-                console.log('exit', err);
-            });
+            // process.on('error', function(err) {
+            //     console.log('error', err);
+            // });
+            // process.on('exit', function(err) {
+            //     console.log('exit', err);
+            // });
 
             process.on('close', (code, signal) => {
-                console.log(`${cmd} ${args.join(" ")}:`, lines, ` (exit ${process.exitCode})`);
-                if (process.exitCode) {
-                    reject(new Error(`Failed to perform "${args.join(" ")}" (code ${process.exitCode})`));
+                if (code) {
+                    reject(new Error(`Failed to perform "${args.join(" ")}" (code ${code})`));
+                }
+                else if (signal) {
+                    reject(new Error(`Failed to perform "${args.join(" ")}" (signal ${signal})`));
                 }
                 else {
                     resolve(lines.trim().split('\r\n'));
@@ -1588,11 +1878,14 @@ console.log(f);
 console.log(f.exists());
 console.log(f.access().name);
 //console.log(f.stat());
+f.list('s+o').forEach(f => console.log('dir: ', f.path));
 
-let pkg = f.upToFile('package.json');
-console.log(`package ${pkg}`);
-pkg = pkg.load();
-console.log(pkg);
+// let pkg = f.upToFile('package.json');
+// console.log(`package ${pkg}`);
+// console.log(pkg.load());
+// pkg.asyncLoad().then(data => {
+//     console.log('async pkg: ', data);
+// });
 
 // f = f.upDir('.git');
 // console.log('Where is .git: ', f);
