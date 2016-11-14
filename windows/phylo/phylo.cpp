@@ -96,7 +96,7 @@ void printFile(const WIN32_FIND_DATA & data) {
 
 	attribs[i] = 0;
 
-	int n = wnsprintf(buf, CCH - 1, L"%s\t%d\t%d\t%d\t%lld\t%ls\n",
+	int n = wnsprintf(buf, CCH - 1, L"%s\t%d\t%d\t%d\t%lld\t%ls\r\n",
 		attribs,
 		FileTimeToPOSIX(data.ftCreationTime),
 		FileTimeToPOSIX(data.ftLastAccessTime),
