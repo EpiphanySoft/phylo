@@ -123,12 +123,13 @@ const re = {
  *
  * ### Synchronous vs Asynchronous
  *
- * All async methods return promises and have names that look like `getFoo()`. For example,
- * the `stat` method is synchronous while the asynchronous version is `getStat`.
+ * All async methods return promises and have names that look like `asyncFoo()`. For
+ * example, the `stat` method is synchronous while the asynchronous version is
+ * `asyncStat`.
  *
  *      var st = file.stat();  // sync
  *
- *      file.getStat().then(st => {
+ *      file.asyncStat().then(st => {
  *          // async
  *      });
  */
@@ -609,10 +610,11 @@ class File {
      *          // file at location s has R and W permission
      *      }
      *
+     * @param {Boolean} [strict] Pass `true` to throw exceptions on failure.
      * @return {FileAccess}
      */
-    access () {
-        var st = this.stat();
+    access (strict) {
+        var st = this.stat(strict);
 
         if (st === null) {
             return null;
@@ -674,10 +676,41 @@ class File {
         return f.isFile();
     }
 
-    restat (cache) {
+    /**
+     * Returns the `[fs.Stats](https://nodejs.org/api/fs.html#fs_class_fs_stats)` but
+     * ensures a fresh copy of the stats are fetched from the file-system.
+     *
+     * @param {Boolean} [cache] Pass `true` to retain a cached stat object after this
+     * call.
+     * @param {Boolean} [strict] Pass `true` to throw exceptions on failure.
+     * @return {fs.Stats}
+     */
+    restat (cache, strict) {
         this._stat = null;
 
-        let ret = this.stat();
+        let ret = this.stat(strict);
+
+        if (cache) {
+            this._stat = ret;
+        }
+
+        return ret;
+    }
+
+    /**
+     * Return the `[fs.Stats](https://nodejs.org/api/fs.html#fs_class_fs_stats)` for a
+     * (potentially) symbolic link but ensures a fresh copy of the stats are fetched
+     * from the file-system.
+     *
+     * @param {Boolean} [cache] Pass `true` to retain a cached stat object after this
+     * call.
+     * @param {Boolean} [strict] Pass `true` to throw exceptions on failure.
+     * @return {fs.Stats}
+     */
+    restatLink (cache, strict) {
+        this._stat = null;
+
+        let ret = this.statLink(strict);
 
         if (cache) {
             this._stat = ret;
@@ -695,9 +728,21 @@ class File {
      *          // file exists...
      *      }
      *
+     * In cases where details of the failure are desired, pass `true` to enable `strict`
+     * processing:
+     *
+     *      var st = File.from(s).stat(true);
+     *
+     *      // will throw if file does not exist or is inaccessible, etc..
+     *
+     * Note that in some cases (e.g., a directory listing created the instance), a stat
+     * object may be cached on this instance. If so, that object will always be returned.
+     * Use `restat` to ensure a fresh stat from the file-system.
+     *
+     * @param {Boolean} [strict] Pass `true` to throw exceptions on failure.
      * @return {fs.Stats} The stats or `null` if the file does not exist.
      */
-    stat () {
+    stat (strict) {
         let ret = this._stat;
 
         if (!ret) {
@@ -708,11 +753,16 @@ class File {
             //     });
             // }
 
-            try {
+            if (strict) {
                 ret = Fs.statSync(this.path);
             }
-            catch (e) {
-                // ignore
+            else {
+                try {
+                    ret = Fs.statSync(this.path);
+                }
+                catch (e) {
+                    // ignore
+                }
             }
         }
 
@@ -722,22 +772,39 @@ class File {
     /**
      * Return the `[fs.Stats](https://nodejs.org/api/fs.html#fs_class_fs_stats)` for a
      * (potentially) symbolic link.
+     *
+     * Note that in some cases (e.g., a directory listing created the instance), a stat
+     * object may be cached on this instance. If so, that object will always be returned.
+     * Use `restatLink` to ensure a fresh stat from the file-system.
+     *
+     * @param {Boolean} [strict] Pass `true` to throw exceptions on failure.
      * @return {fs.Stats} The stats or `null` if the file does not exist.
      */
-    statLink () {
-        // if (File.WIN) {
-        //     return Win.dir(this.path).then(stats => {
-        //         console.log('stats:', stats);
-        //         return stats[0];
-        //     });
-        // }
+    statLink (strict) {
+        let ret = this._stat;
 
-        try {
-            return Fs.lstatSync(this.path);
+        if (!ret) {
+            // if (File.WIN) {
+            //     return Win.dir(this.path).then(stats => {
+            //         console.log('stats:', stats);
+            //         return stats[0];
+            //     });
+            // }
+
+            if (strict) {
+                ret = Fs.lstatSync(this.path);
+            }
+            else {
+                try {
+                    ret = Fs.lstatSync(this.path);
+                }
+                catch (e) {
+                    // ignore
+                }
+            }
         }
-        catch (e) {
-            return null;
-        }
+
+        return ret;
     }
 
     /**
@@ -868,8 +935,32 @@ class File {
     //------------------------------------------------------------------
     // File system checks (async)
 
-    getAccess () {
-        return this.getStat(true).then(st => {
+    /**
+     * Returns a `FileAccess` object describing the access available for this file. If the
+     * file does not exist, `null` is returned.
+     *
+     *      File.from(s).asyncAccess().then(acc => {
+     *          if (!acc) {
+     *              // no file ...
+     *          }
+     *          else if (acc.rw) {
+     *              // file at location s has R and W permission
+     *          }
+     *      });
+     *
+     * Alternatively:
+     *
+     *      File.from(s).asyncCan('rw').then(can => {
+     *          if (can) {
+     *              // file at location s has R and W permission
+     *          }
+     *      });
+     *
+     * @param {Boolean} [strict] Pass `true` to throw exceptions on failure.
+     * @return {Promise}
+     */
+    asyncAccess (strict) {
+        return this.asyncStat(strict).then(st => {
             if (st === null) {
                 return null;
             }
@@ -879,13 +970,100 @@ class File {
         });
     }
 
-    getExists () {
-        return this.getStat(true).then(st => {
+    asyncCan (mode) {
+        return this.asyncAccess().then(acc => {
+            if (acc === null) {
+                return false;
+            }
+
+            return acc[mode] || false;
+        });
+    }
+
+    asyncExists () {
+        return this.asyncStat().then(st => {
             return st !== null;
         });
     }
 
-    getStat (noreject) {
+    /**
+     * Returns the `[fs.Stats](https://nodejs.org/api/fs.html#fs_class_fs_stats)` but
+     * ensures a fresh copy of the stats are fetched from the file-system.
+     *
+     * @param {Boolean} [cache] Pass `true` to retain a cached stat object after this
+     * call.
+     * @param {Boolean} [strict] Pass `true` to reject on failure.
+     * @return {Promise<fs.Stats>} The stats or `null` if the file does not exist.
+     */
+    asyncRestat (cache, strict) {
+        this._stat = null;
+
+        let ret = this.asyncStat(strict);
+
+        if (cache) {
+            ret = ret.then(st => {
+                return this._stat = st;
+            });
+        }
+
+        return ret;
+    }
+
+    /**
+     * Return the `[fs.Stats](https://nodejs.org/api/fs.html#fs_class_fs_stats)` for a
+     * (potentially) symbolic link but ensures a fresh copy of the stats are fetched
+     * from the file-system.
+     *
+     * @param {Boolean} [cache] Pass `true` to retain a cached stat object after this
+     * call.
+     * @param {Boolean} [strict] Pass `true` to throw exceptions on failure.
+     * @return {Promise<fs.Stats>} The stats or `null` if the file does not exist.
+     */
+    asyncRestatLink (cache, strict) {
+        this._stat = null;
+
+        let ret = this.asyncStatLink(strict);
+
+        if (cache) {
+            ret = ret.then(st => {
+                return this._stat = st;
+            });
+        }
+
+        return ret;
+    }
+
+    /**
+     * Return the `[fs.Stats](https://nodejs.org/api/fs.html#fs_class_fs_stats)`.
+     *
+     *      File.from(s).asyncStat().then(st => {
+     *          if (st) {
+     *              // file exists...
+     *          }
+     *      });
+     *
+     * In cases where details of the failure are desired, pass `true` to enable `strict`
+     * processing:
+     *
+     *      File.from(s).asyncStat(true).then(st => {
+     *          // file exists...
+     *      },
+     *      err => {
+     *          // file does not exist or is inaccessible, etc..
+     *      });
+     *
+     * Note that in some cases (e.g., a directory listing created the instance), a stat
+     * object may be cached on this instance. If so, that object will always be returned.
+     * Use `asyncRestat` to ensure a fresh stat from the file-system.
+     *
+     * @param {Boolean} [strict] Pass `true` to reject on failure.
+     * @return {Promise<fs.Stats>} The stats or `null` if the file does not exist.
+     */
+    asyncStat (strict) {
+        if (this._stat) {
+            return Promise.resolve(this._stat);
+        }
+
         // if (File.WIN) {
         //     return Win.dir(this.path).then(stats => {
         //         console.log('stats:', stats);
@@ -898,17 +1076,38 @@ class File {
                 if (!err) {
                     resolve(stats);
                 }
-                else if (noreject) {
-                    resolve(null);
+                else if (strict) {
+                    reject(err);
                 }
                 else {
-                    reject(err);
+                    resolve(null);
                 }
             });
         });
     }
 
-    getStatLink (noreject) {
+    /**
+     * Return the `[fs.Stats](https://nodejs.org/api/fs.html#fs_class_fs_stats)` for a
+     * (potentially) symbolic link.
+     *
+     *      File.from(s).asyncStatLink().then(st => {
+     *          if (st) {
+     *              // file exists...
+     *          }
+     *      });
+     *
+     * Note that in some cases (e.g., a directory listing created the instance), a stat
+     * object may be cached on this instance. If so, that object will always be returned.
+     * Use `asyncRestatLink` to ensure a fresh stat from the file-system.
+     *
+     * @param {Boolean} [strict] Pass `true` to reject on failure.
+     * @return {Promise<fs.Stats>} The stats or `null` if the file does not exist.
+     */
+    asyncStatLink (strict) {
+        if (this._stat) {
+            return Promise.resolve(this._stat);
+        }
+
         // if (File.WIN) {
         //     return Win.dir(this.path).then(stats => {
         //         console.log('stats:', stats);
@@ -921,11 +1120,11 @@ class File {
                 if (!err) {
                     resolve(stats);
                 }
-                else if (noreject) {
-                    resolve(null);
+                else if (strict) {
+                    reject(err);
                 }
                 else {
-                    reject(err);
+                    resolve(null);
                 }
             });
         });
@@ -934,53 +1133,134 @@ class File {
     //-----------------------------------------------------------------
     // File I/O
 
+    asyncLoad (options) {
+        let loader = this.getLoader(options);
+
+        return loader.asyncLoad(this, options);
+    }
+
     getLoader (options) {
-        let ext = this.extent;  // eg "json" or "png"
+        let loader;
+
+        if (options) {
+            if (options.type) {
+                loader = File.loaders[options.type];
+                if (!loader) {
+                    throw new Error(`No such loader as "${options.type}"`);
+                }
+            }
+        }
+
+        if (!loader) {
+            loader = File.loaders[this.extent] || File.loaders.text; // eg "json"
+        }
     }
 
     load (options) {
-        //
-    }
+        let loader = this.getLoader(options);
 
-    asyncLoad (options) {
-        return new Promise((resolve, reject) => {
-            //
-        });
+        return loader.load(this, options);
     }
 }
 
-File.loaders = {
-    binary: {
-        options: {},
+File.Loader = class {
+    constructor (config) {
+        Object.assign(this, config);
 
-        parser (data) {
-            return data;
+        if (!this.options) {
+            this.options = {};
         }
-    },
+    }
 
-    text: {
-        options: {
-            encoding: 'utf8'
-        },
+    extend (config) {
+        var loader = Object.create(this);
 
-        reader (filename, options) {
-            
-        },
+        if (config) {
+            let options = config.options;
 
-        parser (data) {
-            return data;
+            Object.assign(loader, config);
+
+            if (options) {
+                loader.options = this.getOptions(options);
+            }
         }
+
+        return loader;
+    }
+
+    getOptions (options) {
+        var ret = this.options;
+
+        if (options) {
+            ret = Object.assign(Object.assign({}, ret), options);
+            delete ret.type;
+        }
+
+        return ret;
+    }
+
+    asyncLoad (filename, options) {
+        options = this.getOptions(options);
+
+        return this.asyncRead(filename, options).then(data => {
+            return this.parse(data, options);
+        });
+    }
+
+    asyncRead (filename, options) {
+        return new Promise((resolve, reject) => {
+            Fs.readFile(File.path(filename), options, (err, data) => {
+                if (err) {
+                    reject(err);
+                }
+                else {
+                    resolve(data);
+                }
+            });
+        });
+    }
+
+    load (filename, options) {
+        options = this.getOptions(options);
+
+        var data = this.read(filename, options);
+
+        return this.parse(data, options);
+    }
+
+    parse (data) {
+        var split = this.split;
+
+        if (split) {
+            data = data.split(split);
+        }
+
+        return data;
+    }
+
+    read (filename, options) {
+        return Fs.readFileSync(File.path(filename), options);
     }
 };
 
-['json'].forEach(ext => {
-    File.loaders[ext] = {
-        reader: File.loaders.text;
-    };
-});
+File.loaders = {
+    binary: new File.Loader(),
+
+    text: new File.Loader({
+        options: {
+            encoding: 'utf8'
+        }
+    })
+};
 
 File.loaders.bin = File.loaders.binary;
 File.loaders.txt = File.loaders.text;
+
+File.loaders.json = File.loaders.text.extend({
+    parse (data) {
+        return JSON.parse(data);
+    }
+});
 
 const proto = File.prototype;
 
