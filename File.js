@@ -808,58 +808,60 @@ class File {
     }
 
     /**
-     * Searches for a parent folder that matches the given `test`.
+     * Starting at this location, searches upwards for a location that passes the provided
+     * `test` function. If `test` is a string, it will match any item (file or folder).
      *
-     *      // climb until a parent has a ".git" item (file or folder)
+     *      // climb until a folder has a ".git" item (file or folder)
      *      f = file.up('.git');
      *
-     *      // Climb until a parent has a ".git" sub-folder.
+     *      // f references the folder that contains the ".git" folder.
+     *
+     *      // Climb until a folder has a ".git" sub-folder.
      *      f = file.up(p => p.join('.git').isDirectory());
      *
      * The above is equivalent to:
      *
      *      f = file.upDir('.git');
      *
-     * If the current folder could match, `where` is a better choice. This is because `up`
-     * will always skip the current folder.
+     *      // f references the folder that contains the ".git" folder.
      *
      * @param {String/Function} test If a string is passed, the string is passed to the
-     * `has` method. Otherwise, the `test` function is called with the candidate parent
-     * and should return `true` to indicate the parent is a match.
+     * `has` method. Otherwise, the `test` function is called with the candidate and
+     * should return `true` to indicate a match.
      * @return {File}
      */
     up (test) {
-        let p = this.parent;
+        let fn = (typeof test === 'string') ? (p => p.has(test)) : test;
 
-        if (p && test) {
-            p = p.where(test);
+        for (let parent = this; parent; parent = parent.parent) {
+            if (fn(parent)) {
+                return parent;
+            }
         }
 
-        return p;
+        return null;
     }
 
     /**
-     * Searches for a parent folder that has the specified sub-directory.
+     * Searches upwards for a folder that has the specified sub-directory.
      *
      *      f = file.upDir('.git');
      *
-     * If the current folder could match, `whereDir` is a better choice. This is because
-     * `upDir` will always skip the current folder.
+     *      // f references the folder that contains the ".git" folder.
      *
-     * @param {String} sub The sub-directory that the desired parent must contain.
+     * @param {String} dir The sub-directory that the desired parent must contain.
      * @return {File}
      */
-    upDir (sub) {
-        return this.up(parent => parent.hasDir(sub));
+    upDir (dir) {
+        return this.up(parent => parent.hasDir(dir));
     }
 
     /**
-     * Searches for a parent folder that has the specified file.
+     * Searches upwards for a folder that has the specified file.
      *
      *      f = file.upFile('package.json');
      *
-     * If the current folder could match, `whereFile` is a better choice. This is because
-     * `upFile` will always skip the current folder.
+     *      // f references the folder that contains the "package.json" file.
      *
      * @param {String} file The file that the desired parent must contain.
      * @return {File}
@@ -869,67 +871,72 @@ class File {
     }
 
     /**
-     * Starting at this location, searches for a location that passes the provided `test`
-     * function. If `test` is a string, it will match any item (file or folder).
+     * Starting at this location, searches upwards for a location that contains the given
+     * item and returns a `File` describing the item.
      *
      *      // climb until a folder has a ".git" item (file or folder)
-     *      f = file.where('.git');
+     *      f = file.upTo('.git');
      *
-     *      // Climb until a folder has a ".git" sub-folder.
-     *      f = file.where(p => p.join('.git').isDirectory());
+     *      // f references the ".git" folder.
      *
      * The above is equivalent to:
      *
-     *      f = file.whereDir('.git');
+     *      f = file.upToDir('.git');
      *
-     * Unlike the `up` family, the `where` family can match the location described by this
-     * file.
+     *      // f references the ".git" folder.
      *
-     * @param {String/Function} test If a string is passed, the string is passed to the
-     * `has` method. Otherwise, the `test` function is called with the candidate and
-     * should return `true` to indicate a match.
+     * @param {String} name A name passed to the `has` method.
      * @return {File}
      */
-    where (test) {
-        let test = (typeof test === 'string') ? (p => p.has(test)) : test;
+    upTo (name) {
+        let ret = this.up(name);
 
-        for (let parent = this; parent; parent = parent.parent) {
-            if (test(parent)) {
-                return parent;
-            }
+        if (ret) {
+            ret = ret.join(name);
         }
 
-        return null;
+        return ret;
     }
 
     /**
-     * Searches for a folder that has the specified sub-directory.
+     * Searches upwards for a folder that has the specified sub-directory and returns a
+     * `File` describing the sub-directory.
      *
-     *      f = file.whereDir('.git');
+     *      f = file.upDir('.git');
      *
-     * Unlike the `up` family, the `where` family can match the location described by this
-     * file.
+     *      // f references the ".git" folder.
      *
-     * @param {String} sub The sub-directory that the desired parent must contain.
+     * @param {String} dir The sub-directory that the desired parent must contain.
      * @return {File}
      */
-    whereDir (sub) {
-        return this.where(parent => parent.hasDir(sub));
+    upToDir (dir) {
+        let ret = this.upDir(dir);
+
+        if (ret) {
+            ret = ret.join(dir);
+        }
+
+        return ret;
     }
 
     /**
-     * Searches for a folder that has the specified file.
+     * Searches upwards for a folder that has the specified file.
      *
-     *      f = file.whereFile('package.json');
+     *      f = file.upFile('package.json');
      *
-     * Unlike the `up` family, the `where` family can match the location described by this
-     * file.
+     *      // f references the ".git" folder.
      *
      * @param {String} file The file that the desired parent must contain.
      * @return {File}
      */
-    whereFile (sub) {
-        return this.where(parent => parent.hasFile(sub));
+    upToFile (file) {
+        let ret = this.upFile(file);
+
+        if (ret) {
+            ret = ret.join(file);
+        }
+
+        return ret;
     }
 
     //------------------------------------------------------------------
@@ -1071,17 +1078,19 @@ class File {
         //     });
         // }
 
-        return new Promise((resolve, reject) => {
-            Fs.stat(this.path, (err, stats) => {
-                if (!err) {
-                    resolve(stats);
-                }
-                else if (strict) {
-                    reject(err);
-                }
-                else {
-                    resolve(null);
-                }
+        return _async('_asyncStat', () => {
+            return new Promise((resolve, reject) => {
+                Fs.stat(this.path, (err, stats) => {
+                    if (!err) {
+                        resolve(stats);
+                    }
+                    else if (strict) {
+                        reject(err);
+                    }
+                    else {
+                        resolve(null);
+                    }
+                });
             });
         });
     }
@@ -1108,24 +1117,26 @@ class File {
             return Promise.resolve(this._stat);
         }
 
-        // if (File.WIN) {
-        //     return Win.dir(this.path).then(stats => {
-        //         console.log('stats:', stats);
-        //         return stats[0];
-        //     });
-        // }
+        return _async('_asyncStatLink', () => {
+            // if (File.WIN) {
+            //     return Win.dir(this.path).then(stats => {
+            //         console.log('stats:', stats);
+            //         return stats[0];
+            //     });
+            // }
 
-        return new Promise((resolve, reject) => {
-            Fs.lstat(this.path, (err, stats) => {
-                if (!err) {
-                    resolve(stats);
-                }
-                else if (strict) {
-                    reject(err);
-                }
-                else {
-                    resolve(null);
-                }
+            return new Promise((resolve, reject) => {
+                Fs.lstat(this.path, (err, stats) => {
+                    if (!err) {
+                        resolve(stats);
+                    }
+                    else if (strict) {
+                        reject(err);
+                    }
+                    else {
+                        resolve(null);
+                    }
+                });
             });
         });
     }
@@ -1154,6 +1165,8 @@ class File {
         if (!loader) {
             loader = File.loaders[this.extent] || File.loaders.text; // eg "json"
         }
+
+        return loader;
     }
 
     load (options) {
@@ -1161,7 +1174,25 @@ class File {
 
         return loader.load(this, options);
     }
-}
+
+    //------------------------------------------------------------------------
+
+    _async (name, fn) {
+        var pending = this[name];
+
+        if (!pending) {
+            this[name] = pending = fn().then(result => {
+                this[name] = null;
+                return result;
+            });
+        }
+
+        return pending;
+    }
+
+} // class File
+
+//------------------------------------------------------------------------
 
 File.Loader = class {
     constructor (config) {
@@ -1203,7 +1234,7 @@ File.Loader = class {
         options = this.getOptions(options);
 
         return this.asyncRead(filename, options).then(data => {
-            return this.parse(data, options);
+            return this._parse(filename, data, options);
         });
     }
 
@@ -1225,7 +1256,7 @@ File.Loader = class {
 
         var data = this.read(filename, options);
 
-        return this.parse(data, options);
+        return this._parse(filename, data, options);
     }
 
     parse (data) {
@@ -1240,6 +1271,16 @@ File.Loader = class {
 
     read (filename, options) {
         return Fs.readFileSync(File.path(filename), options);
+    }
+
+    _parse (filename, data, options) {
+        try {
+            return this.parse(data, options);
+        }
+        catch (e) {
+            e.message = `Cannot parse ${filename}: ${e.message}`;
+            throw e;
+        }
     }
 };
 
@@ -1541,17 +1582,22 @@ var f = File.cwd();
 console.log(`home: ${File.home()}`);
 console.log(`profile: ${File.profile('Acme')}`);
 
-console.log('dir:', Win.dir(f.path));
+//console.log('dir:', Win.dir(f.path));
 
 console.log(f);
 console.log(f.exists());
 console.log(f.access().name);
-console.log(f.stat());
+//console.log(f.stat());
 
-f = f.whereDir('.git');
-console.log('Where is .git: ', f);
-console.log(File.exists(f));
-console.log(File.access(f));
+let pkg = f.upToFile('package.json');
+console.log(`package ${pkg}`);
+pkg = pkg.load();
+console.log(pkg);
+
+// f = f.upDir('.git');
+// console.log('Where is .git: ', f);
+// console.log(File.exists(f));
+// console.log(File.access(f));
 
 //console.log('The stat: ', f.stat());
-console.log(`is: file=${File.isFile(f)} dir=${File.isDirectory(f)}`);
+//console.log(`is: file=${File.isFile(f)} dir=${File.isDirectory(f)}`);
