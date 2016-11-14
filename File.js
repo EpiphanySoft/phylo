@@ -331,17 +331,25 @@ class File {
         return path.split(re.split);
     }
 
+    //-----------------------------------------------------------------
+
     /**
-     * Initialize an instance given one or more path fragments.
+     * Initialize an instance by joining the given path fragments.
      * @param {File/String...} parts
      */
     constructor (...parts) {
         this.path = File.joinPath(...parts);
     }
 
-    //-----------------------------------------------------------------
+    //----------------------------
     // Properties
 
+    /**
+     * @property {String} name
+     * @readonly
+     * The name of the file at the end of the path. For example, given "/foo/bar/baz",
+     * the `name` is "baz".
+     */
     get name () {
         var name = this._name;
 
@@ -354,6 +362,12 @@ class File {
         return name;
     }
 
+    /**
+     * @property {File} parent
+     * @readonly
+     * The parent directory of this file. For example, for "/foo/bar/baz" the `parent` is
+     * "/foo/bar". This is `null` for the file system root.
+     */
     get parent () {
         var parent = this._parent;
 
@@ -371,6 +385,12 @@ class File {
         return parent;
     }
 
+    /**
+     * @property {String} extent
+     * @readonly
+     * The type of the file at the end of the path. For example, given "/foo/bar/baz.js",
+     * the `extent` is "js".
+     */
     get extent () {
         var ext = this._extent;
 
@@ -559,12 +579,12 @@ class File {
 
     isAbsolute () {
         var p = this.path;
-        return p && Path.isAbsolute(p);
+        return p ? Path.isAbsolute(p) : false;
     }
 
     isRelative () {
         var p = this.path;
-        return p && !Path.isAbsolute(p);
+        return p ? !Path.isAbsolute(p) : false;
     }
 
     //-----------------------------------------------------------------
@@ -573,10 +593,26 @@ class File {
     /**
      * Returns a `FileAccess` object describing the access available for this file. If the
      * file does not exist, `null` is returned.
+     *
+     *      var acc = File.from(s).access();
+     *
+     *      if (!acc) {
+     *          // no file ...
+     *      }
+     *      else if (acc.rw) {
+     *          // file at location s has R and W permission
+     *      }
+     *
+     * Alternatively:
+     *
+     *      if (File.from(s).can('rw')) {
+     *          // file at location s has R and W permission
+     *      }
+     *
      * @return {FileAccess}
      */
     access () {
-        var st = this.stat(true);
+        var st = this.stat();
 
         if (st === null) {
             return null;
@@ -602,12 +638,12 @@ class File {
      * @return {Boolean}
      */
     exists () {
-        var st = this.stat(true);
+        var st = this.stat();
         return st !== null;
     }
 
     /**
-     * Returns `true` if the specified `rel` path exists relative to this path.
+     * Returns `true` if the specified path exists relative to this path.
      * @param {String} rel A path relative to this path.
      * @return {Boolean}
      */
@@ -617,7 +653,7 @@ class File {
     }
 
     /**
-     * Returns `true` if the specified `rel` directory exists relative to this path.
+     * Returns `true` if the specified directory exists relative to this path.
      * @param {String} rel A path relative to this path.
      * @return {Boolean}
      */
@@ -628,7 +664,7 @@ class File {
     }
 
     /**
-     * Returns `true` if the specified `rel` file exists relative to this path.
+     * Returns `true` if the specified file exists relative to this path.
      * @param {String} rel A path relative to this path.
      * @return {Boolean}
      */
@@ -638,40 +674,57 @@ class File {
         return f.isFile();
     }
 
-    /**
-     * Return the `[fs.Stats](https://nodejs.org/api/fs.html#fs_class_fs_stats)`
-     * @param {Boolean} [nothrow] Pass `true` to return `null` on failure instead of
-     * throwing an `Error`.
-     * @return {fs.Stats}
-     */
-    stat (nothrow) {
-        // if (File.WIN) {
-        //     return Win.dir(this.path).then(stats => {
-        //         console.log('stats:', stats);
-        //         return stats[0];
-        //     });
-        // }
+    restat (cache) {
+        this._stat = null;
 
-        if (nothrow) {
+        let ret = this.stat();
+
+        if (cache) {
+            this._stat = ret;
+        }
+
+        return ret;
+    }
+
+    /**
+     * Return the `[fs.Stats](https://nodejs.org/api/fs.html#fs_class_fs_stats)`.
+     *
+     *      var st = File.from(s).stat();
+     *
+     *      if (st) {
+     *          // file exists...
+     *      }
+     *
+     * @return {fs.Stats} The stats or `null` if the file does not exist.
+     */
+    stat () {
+        let ret = this._stat;
+
+        if (!ret) {
+            // if (File.WIN) {
+            //     return Win.dir(this.path).then(stats => {
+            //         console.log('stats:', stats);
+            //         return stats[0];
+            //     });
+            // }
+
             try {
-                return Fs.statSync(this.path);
+                ret = Fs.statSync(this.path);
             }
             catch (e) {
-                return null;
+                // ignore
             }
         }
 
-        return Fs.statSync(this.path);
+        return ret;
     }
 
     /**
      * Return the `[fs.Stats](https://nodejs.org/api/fs.html#fs_class_fs_stats)` for a
      * (potentially) symbolic link.
-     * @param {Boolean} [nothrow] Pass `true` to return `null` on failure instead of
-     * throwing an `Error`.
-     * @return {fs.Stats}
+     * @return {fs.Stats} The stats or `null` if the file does not exist.
      */
-    statLink (nothrow) {
+    statLink () {
         // if (File.WIN) {
         //     return Win.dir(this.path).then(stats => {
         //         console.log('stats:', stats);
@@ -679,38 +732,99 @@ class File {
         //     });
         // }
 
-        if (nothrow) {
-            try {
-                return Fs.lstatSync(this.path);
-            }
-            catch (e) {
-                return null;
-            }
+        try {
+            return Fs.lstatSync(this.path);
         }
-
-        return Fs.lstatSync(this.path);
+        catch (e) {
+            return null;
+        }
     }
 
-    up (sub) {
+    /**
+     * Searches for a parent folder that matches the given `test`.
+     *
+     *      // climb until a parent has a ".git" item (file or folder)
+     *      f = file.up('.git');
+     *
+     *      // Climb until a parent has a ".git" sub-folder.
+     *      f = file.up(p => p.join('.git').isDirectory());
+     *
+     * The above is equivalent to:
+     *
+     *      f = file.upDir('.git');
+     *
+     * If the current folder could match, `where` is a better choice. This is because `up`
+     * will always skip the current folder.
+     *
+     * @param {String/Function} test If a string is passed, the string is passed to the
+     * `has` method. Otherwise, the `test` function is called with the candidate parent
+     * and should return `true` to indicate the parent is a match.
+     * @return {File}
+     */
+    up (test) {
         let p = this.parent;
 
-        if (p && sub) {
-            p = p.where(sub);
+        if (p && test) {
+            p = p.where(test);
         }
 
         return p;
     }
 
+    /**
+     * Searches for a parent folder that has the specified sub-directory.
+     *
+     *      f = file.upDir('.git');
+     *
+     * If the current folder could match, `whereDir` is a better choice. This is because
+     * `upDir` will always skip the current folder.
+     *
+     * @param {String} sub The sub-directory that the desired parent must contain.
+     * @return {File}
+     */
     upDir (sub) {
         return this.up(parent => parent.hasDir(sub));
     }
 
-    upFile (sub) {
-        return this.up(parent => parent.hasFile(sub));
+    /**
+     * Searches for a parent folder that has the specified file.
+     *
+     *      f = file.upFile('package.json');
+     *
+     * If the current folder could match, `whereFile` is a better choice. This is because
+     * `upFile` will always skip the current folder.
+     *
+     * @param {String} file The file that the desired parent must contain.
+     * @return {File}
+     */
+    upFile (file) {
+        return this.up(parent => parent.hasFile(file));
     }
 
-    where (sub) {
-        let test = (typeof sub === 'string') ? (p => p.has(sub)) : sub;
+    /**
+     * Starting at this location, searches for a location that passes the provided `test`
+     * function. If `test` is a string, it will match any item (file or folder).
+     *
+     *      // climb until a folder has a ".git" item (file or folder)
+     *      f = file.where('.git');
+     *
+     *      // Climb until a folder has a ".git" sub-folder.
+     *      f = file.where(p => p.join('.git').isDirectory());
+     *
+     * The above is equivalent to:
+     *
+     *      f = file.whereDir('.git');
+     *
+     * Unlike the `up` family, the `where` family can match the location described by this
+     * file.
+     *
+     * @param {String/Function} test If a string is passed, the string is passed to the
+     * `has` method. Otherwise, the `test` function is called with the candidate and
+     * should return `true` to indicate a match.
+     * @return {File}
+     */
+    where (test) {
+        let test = (typeof test === 'string') ? (p => p.has(test)) : test;
 
         for (let parent = this; parent; parent = parent.parent) {
             if (test(parent)) {
@@ -721,10 +835,32 @@ class File {
         return null;
     }
 
+    /**
+     * Searches for a folder that has the specified sub-directory.
+     *
+     *      f = file.whereDir('.git');
+     *
+     * Unlike the `up` family, the `where` family can match the location described by this
+     * file.
+     *
+     * @param {String} sub The sub-directory that the desired parent must contain.
+     * @return {File}
+     */
     whereDir (sub) {
         return this.where(parent => parent.hasDir(sub));
     }
 
+    /**
+     * Searches for a folder that has the specified file.
+     *
+     *      f = file.whereFile('package.json');
+     *
+     * Unlike the `up` family, the `where` family can match the location described by this
+     * file.
+     *
+     * @param {String} file The file that the desired parent must contain.
+     * @return {File}
+     */
     whereFile (sub) {
         return this.where(parent => parent.hasFile(sub));
     }
@@ -851,6 +987,7 @@ const proto = File.prototype;
 Object.assign(proto, {
     $isFile: true,
     _re: re,
+    _stat: null,
 
     _extent: undefined,
     _name: undefined,
