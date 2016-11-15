@@ -1,5 +1,9 @@
 'use strict';
 
+// TODO mkdirs
+// TODO rm -rf
+// TODO write
+
 const Fs = require('fs');
 const OS = require('os');
 const Path = require('path');
@@ -441,6 +445,27 @@ class File {
         return File.from(this.absolutePath()); // null/blank handling
     }
 
+    asyncCanonicalPath () {
+        let path = this.absolutePath();
+
+        return new Promise((resolve, reject) => {
+            Fs.realpath(path, (err, result) => {
+                if (err) {
+                    reject(new Error(`Cannot determine canonical path of "${path}" - ${err.message || err}`));
+                }
+                else {
+                    resolve(result);
+                }
+            });
+        })
+    }
+
+    asyncCanonicalize () {
+        return this.asyncCanonicalPath().then(path => {
+            return new File(path);
+        });
+    }
+
     /**
      * Returns the canonical path to this file
      * @returns {String} The canonical path to this file.
@@ -580,30 +605,6 @@ class File {
     //-----------------------------------------------------------------
     // Path checks
 
-    contains (subPath) {
-        subPath = File.from(subPath);
-
-        if (subPath) {
-            // Ensure we don't have trailing slashes ("/foo/bar/" => "/foo/bar")
-            let a = this.slashify().unterminatedPath();
-            let b = subPath.slashifiedPath();
-
-            if (!File.CASE) {
-                a = a.toLowerCase();
-                b = b.toLowerCase();
-            }
-
-            if (a.startsWith(b)) {
-                // a = "/foo/bar"
-                // b = "/foo/bar/zip" ==> true
-                // b = "/foo/barf"    ==> false
-                return b[a.length] === '/';
-            }
-        }
-
-        return false;
-    }
-
     compare (other) {
         other = File.from(other);
 
@@ -654,6 +655,30 @@ class File {
     isRelative () {
         var p = this.path;
         return p ? !Path.isAbsolute(p) : false;
+    }
+
+    prefixOf (subPath) {
+        subPath = File.from(subPath);
+
+        if (subPath) {
+            // Ensure we don't have trailing slashes ("/foo/bar/" => "/foo/bar")
+            let a = this.slashify().unterminatedPath();
+            let b = subPath.slashifiedPath();
+
+            if (!File.CASE) {
+                a = a.toLowerCase();
+                b = b.toLowerCase();
+            }
+
+            if (a.startsWith(b)) {
+                // a = "/foo/bar"
+                // b = "/foo/bar/zip" ==> true
+                // b = "/foo/barf"    ==> false
+                return b[a.length] === '/';
+            }
+        }
+
+        return false;
     }
 
     //-----------------------------------------------------------------
@@ -745,18 +770,43 @@ class File {
     }
 
     /**
+     * Returns `true` if this file is a hidden file.
+     * @param {Boolean} [strict] Pass `true` to match native Explorer/Finder meaning
+     * of hidden state.
+     * @return {Boolean}
+     */
+    isHidden (strict) {
+        if (!File.Win || !strict) {
+            let name = this.name || '';
+
+            if (name[0] === '.') {
+                return true;
+            }
+        }
+
+        if (File.Win) {
+            var st = this.stat();
+
+            if (st.attribs && st.attribs.indexOf('H') > -1) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Returns the `[fs.Stats](https://nodejs.org/api/fs.html#fs_class_fs_stats)` but
      * ensures a fresh copy of the stats are fetched from the file-system.
      *
      * @param {Boolean} [cache] Pass `true` to retain a cached stat object after this
      * call.
-     * @param {Boolean} [strict] Pass `true` to throw exceptions on failure.
      * @return {fs.Stats}
      */
-    restat (cache, strict) {
+    restat (cache) {
         this._stat = null;
 
-        let ret = this.stat(strict);
+        let ret = this.stat();
 
         if (cache) {
             this._stat = ret;
@@ -772,13 +822,12 @@ class File {
      *
      * @param {Boolean} [cache] Pass `true` to retain a cached stat object after this
      * call.
-     * @param {Boolean} [strict] Pass `true` to throw exceptions on failure.
      * @return {fs.Stats}
      */
-    restatLink (cache, strict) {
+    restatLink (cache) {
         this._stat = null;
 
-        let ret = this.statLink(strict);
+        let ret = this.statLink();
 
         if (cache) {
             this._stat = ret;
@@ -807,33 +856,23 @@ class File {
      * object may be cached on this instance. If so, that object will always be returned.
      * Use `restat` to ensure a fresh stat from the file-system.
      *
-     * @param {Boolean} [strict] Pass `true` to throw exceptions on failure.
      * @return {fs.Stats} The stats or `null` if the file does not exist.
      */
-    stat (strict) {
+    stat () {
         let ret = this._stat;
 
         if (!ret) {
             let path = this.path;
 
-            if (strict) {
+            try {
                 ret = Fs.statSync(path);
 
                 if (File.Win) {
                     ret.attribs = Win.attrib(path);
                 }
             }
-            else {
-                try {
-                    ret = Fs.statSync(path);
-
-                    if (File.Win) {
-                        ret.attribs = Win.attrib(path);
-                    }
-                }
-                catch (e) {
-                    // ignore
-                }
+            catch (e) {
+                // ignore
             }
         }
 
@@ -848,33 +887,23 @@ class File {
      * object may be cached on this instance. If so, that object will always be returned.
      * Use `restatLink` to ensure a fresh stat from the file-system.
      *
-     * @param {Boolean} [strict] Pass `true` to throw exceptions on failure.
      * @return {fs.Stats} The stats or `null` if the file does not exist.
      */
-    statLink (strict) {
+    statLink () {
         let ret = this._stat;
 
         if (!ret) {
             let path = this.path;
 
-            if (strict) {
+            try {
                 ret = Fs.lstatSync(path);
 
                 if (File.Win) {
                     ret.attribs = Win.attrib(path);
                 }
             }
-            else {
-                try {
-                    ret = Fs.lstatSync(path);
-
-                    if (File.Win) {
-                        ret.attribs = Win.attrib(path);
-                    }
-                }
-                catch (e) {
-                    // ignore
-                }
+            catch (e) {
+                // ignore
             }
         }
 
@@ -1037,11 +1066,10 @@ class File {
      *          }
      *      });
      *
-     * @param {Boolean} [strict] Pass `true` to throw exceptions on failure.
      * @return {Promise}
      */
-    asyncAccess (strict) {
-        return this.asyncStat(strict).then(st => {
+    asyncAccess () {
+        return this.asyncStat().then(st => {
             if (st === null) {
                 return null;
             }
@@ -1068,18 +1096,41 @@ class File {
     }
 
     /**
+     * Returns a Promise that resolves to `true` if this file is a hidden file.
+     * @param {Boolean} [strict] Pass `true` to match native Explorer/Finder meaning
+     * of hidden state.
+     * @return {Promise<Boolean>}
+     */
+    asyncIsHidden (strict) {
+        if (!File.Win || !strict) {
+            let name = this.name || '';
+
+            if (name[0] === '.') {
+                return Promise.resolve(true);
+            }
+        }
+
+        if (File.Win) {
+            return this.asyncStat().then(st => {
+                return st.attribs ? st.attribs.indexOf('H') > -1 : false;
+            });
+        }
+
+        return Promise.resolve(false);
+    }
+
+    /**
      * Returns the `[fs.Stats](https://nodejs.org/api/fs.html#fs_class_fs_stats)` but
      * ensures a fresh copy of the stats are fetched from the file-system.
      *
      * @param {Boolean} [cache] Pass `true` to retain a cached stat object after this
      * call.
-     * @param {Boolean} [strict] Pass `true` to reject on failure.
      * @return {Promise<fs.Stats>} The stats or `null` if the file does not exist.
      */
-    asyncRestat (cache, strict) {
+    asyncRestat (cache) {
         this._stat = null;
 
-        let ret = this.asyncStat(strict);
+        let ret = this.asyncStat();
 
         if (cache) {
             ret = ret.then(st => {
@@ -1097,13 +1148,12 @@ class File {
      *
      * @param {Boolean} [cache] Pass `true` to retain a cached stat object after this
      * call.
-     * @param {Boolean} [strict] Pass `true` to throw exceptions on failure.
      * @return {Promise<fs.Stats>} The stats or `null` if the file does not exist.
      */
-    asyncRestatLink (cache, strict) {
+    asyncRestatLink (cache) {
         this._stat = null;
 
-        let ret = this.asyncStatLink(strict);
+        let ret = this.asyncStatLink();
 
         if (cache) {
             ret = ret.then(st => {
@@ -1137,10 +1187,9 @@ class File {
      * object may be cached on this instance. If so, that object will always be returned.
      * Use `asyncRestat` to ensure a fresh stat from the file-system.
      *
-     * @param {Boolean} [strict] Pass `true` to reject on failure.
      * @return {Promise<fs.Stats>} The stats or `null` if the file does not exist.
      */
-    asyncStat (strict) {
+    asyncStat () {
         if (this._stat) {
             return Promise.resolve(this._stat);
         }
@@ -1148,29 +1197,19 @@ class File {
         let path = this.path;
 
         return this._async('_asyncStat', () => {
-            return new Promise((resolve, reject) => {
+            return new Promise(resolve => {
                 Fs.stat(path, (err, stats) => {
                     if (err) {
-                        if (strict) {
-                            reject(err);
-                        }
-                        else {
-                            resolve(null);
-                        }
+                        resolve(null);
                     }
                     else if (File.Win) {
                         Win.asyncAttrib(path).then(attr => {
                             stats.attribs = attr;
                             resolve(stats);
                         },
-                        err => {
-                            if (strict) {
-                                reject(err);
-                            }
-                            else {
-                                stats.attribs = '';
-                                resolve(stats);
-                            }
+                        e => {
+                            stats.attribs = '';
+                            resolve(stats);
                         });
                     }
                     else {
@@ -1195,10 +1234,9 @@ class File {
      * object may be cached on this instance. If so, that object will always be returned.
      * Use `asyncRestatLink` to ensure a fresh stat from the file-system.
      *
-     * @param {Boolean} [strict] Pass `true` to reject on failure.
      * @return {Promise<fs.Stats>} The stats or `null` if the file does not exist.
      */
-    asyncStatLink (strict) {
+    asyncStatLink () {
         if (this._stat) {
             return Promise.resolve(this._stat);
         }
@@ -1206,29 +1244,19 @@ class File {
         let path = this.path;
 
         return this._async('_asyncStatLink', () => {
-            return new Promise((resolve, reject) => {
+            return new Promise(resolve => {
                 Fs.lstat(path, (err, stats) => {
                     if (err) {
-                        if (strict) {
-                            reject(err);
-                        }
-                        else {
-                            resolve(null);
-                        }
+                        resolve(null);
                     }
                     else if (File.Win) {
                         Win.asyncAttrib(path).then(attr => {
                             stats.attribs = attr;
                             resolve(stats);
                         },
-                        err => {
-                            if (strict) {
-                                reject(err);
-                            }
-                            else {
-                                stats.attribs = '';
-                                resolve(stats);
-                            }
+                        e => {
+                            stats.attribs = '';
+                            resolve(stats);
                         });
                     }
                     else {
@@ -2128,49 +2156,3 @@ if (File.WIN) {
 //------------------------------------------------------------
 
 module.exports = File;
-
-//------------------------------------------------------------
-
-var f = File.cwd();
-
-console.log(`home: ${File.home()}`);
-console.log(`profile: ${File.profile('Acme')}`);
-
-//console.log('dir:', Win.dir(f.path));
-
-// console.log(f);
-// console.log(f.exists());
-// console.log(f.access().name);
-
-//console.log('fsattr: ', fswin.getAttributesSync(f.join('.git').path));
-
-// console.log(f.join('.idea').stat());
-// console.log(f.join('.git').stat());
-
-//console.log(f.stat());
-//f.list('s+o').forEach(f => console.log('dir: ', f.path));
-
-// f.asyncList('Asd').then(files => {
-//     files.forEach(f => console.log('dir: ', f.path));
-// });
-
-f.asyncWalk('Ad', (item, state) => {
-    console.log(`${' '.repeat(state.stack.length * 4)}${item.name} - ${item._stat ? item._stat.attribs : ''}`);
-}).then(() => {
-    console.log('done');
-});
-
-// let pkg = f.upToFile('package.json');
-// console.log(`package ${pkg}`);
-// console.log(pkg.load());
-// pkg.asyncLoad().then(data => {
-//     console.log('async pkg: ', data);
-// });
-
-// f = f.upDir('.git');
-// console.log('Where is .git: ', f);
-// console.log(File.exists(f));
-// console.log(File.access(f));
-
-//console.log('The stat: ', f.stat());
-//console.log(`is: file=${File.isFile(f)} dir=${File.isDirectory(f)}`);
