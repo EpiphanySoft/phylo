@@ -3,9 +3,8 @@
 const Fs = require('fs');
 const OS = require('os');
 const Path = require('path');
-const ChildProcess = require('child_process');
 const json5 = require('json5');
-const fswin = require('fswin');
+let fswin;
 
 const platform = OS.platform();
 
@@ -136,12 +135,14 @@ const re = {
  *      });
  */
 class File {
+    //noinspection JSUnusedGlobalSymbols
     /**
      * Returns the `FileAccess` object describing the access modes available for the
      * specified file. This will be `null` if the file does not exist.
      *
      * @param {String/File} file The `File` instance of path as a string.
-     * @return {FileAccess}
+     * @param {boolean} [strict=false] Pass `true` to throw exceptions on failure.
+     * @return {FileAccess} The `FileAccess` descriptor.
      */
     static access (file, strict) {
         if (!file) {
@@ -156,7 +157,7 @@ class File {
      * @return {File} The `process.cwd()` as a `File` instance.
      */
     static cwd () {
-        return new File(process.cwd());
+        return new this(process.cwd());
     }
 
     /**
@@ -200,7 +201,7 @@ class File {
     /**
      * Returns `true` if the specified path is a directory, `false` if not.
      * @param {String/File} file The `File` or path to test.
-     * @return {Boolean}
+     * @return {Boolean} Whether the file is a directory or not.
      */
     static isDir (file) {
         if (!file) {
@@ -213,7 +214,7 @@ class File {
     /**
      * Returns `true` if the specified path is a file, `false` if not.
      * @param {String/File} file The `File` or path to test.
-     * @return {Boolean}
+     * @return {Boolean} Whether the file is a file or not (opposite of isDir).
      */
     static isFile (file) {
         if (!file) {
@@ -226,8 +227,8 @@ class File {
     /**
      * This method is the same as `join()` in the `path` module except that the items
      * can be `File` instances or `String` and a `File` instance is returned.
-     * @param {File/String...} parts Path pieces to join using `path.join()`.
-     * @return {File}
+     * @param {File.../String...} parts Path pieces to join using `path.join()`.
+     * @return {File} The `File` instance from the resulting path.
      */
     static join (...parts) {
         var f = File.joinPath(...parts);
@@ -237,8 +238,8 @@ class File {
     /**
      * This method is the same as `join()` in the `path` module except that the items
      * can be `File` instances or `String`.
-     * @param {File/String...} parts Path pieces to join using `path.join()`.
-     * @return {String}
+     * @param {File.../String...} parts Path pieces to join using `path.join()`.
+     * @return {String} The resulting path.
      */
     static joinPath (...parts) {
         let n = parts && parts.length || 0;
@@ -259,7 +260,7 @@ class File {
     /**
      * Returns the path as a string given a `File` or string.
      * @param {String/File} file
-     * @return {String}
+     * @return {String} The path.
      */
     static path (file) {
         return ((file && file.$isFile) ? file.path : file) || '';
@@ -281,7 +282,7 @@ class File {
      * The set of recognized platforms for profile locations is found in `profilers`.
      *
      * @param {String} company The name of the application's producer.
-     * @return {File}
+     * @return {File} The `File` instance.
      */
     static profile (company) {
         company = company || File.COMPANY;
@@ -298,8 +299,8 @@ class File {
     /**
      * This method is the same as `resolve()` in the `path` module except that the items
      * can be `File` instances or `String` and a `File` instance is returned.
-     * @param {File/String...} parts Path pieces to resolve using `path.resolve()`.
-     * @return {File}
+     * @param {File.../String...} parts Path pieces to resolve using `path.resolve()`.
+     * @return {File} The `File` instance.
      */
     static resolve (...parts) {
         var f = File.resolvePath(...parts);
@@ -309,8 +310,8 @@ class File {
     /**
      * This method is the same as `resolve()` in the `path` module except that the items
      * can be `File` instances or `String`.
-     * @param {File/String...} parts Path pieces to resolve using `path.resolve()`.
-     * @return {String}
+     * @param {File.../String...} parts Path pieces to resolve using `path.resolve()`.
+     * @return {String} The resulting path.
      */
     static resolvePath (...parts) {
         for (let i = 0, n = parts.length; i < n; ++i) {
@@ -327,13 +328,19 @@ class File {
     /**
      * Splits the given `File` or path into an array of parts.
      * @param {String/File} filePath
-     * @return {String[]}
+     * @return {String[]} The path parts.
      */
     static split (filePath) {
         let path = File.path(filePath);
         return path.split(re.split);
     }
 
+    /**
+     * Compares two files using the `File` instances' `compare` method.
+     * @param file1 A `File` instance.
+     * @param file2 A `File` instance.
+     * @returns {number} te result of the comparison.
+     */
     static sorter (file1, file2) {
         var a = File.from(file1);
         return a.compare(file2);
@@ -343,7 +350,7 @@ class File {
 
     /**
      * Initialize an instance by joining the given path fragments.
-     * @param {File/String...} parts
+     * @param {File/String...} parts The path fragments.
      */
     constructor (...parts) {
         this.path = File.joinPath(...parts);
@@ -357,6 +364,7 @@ class File {
      * @readonly
      * The name of the file at the end of the path. For example, given "/foo/bar/baz",
      * the `name` is "baz".
+     * Typically known as `basename` on unix-like systems.
      */
     get name () {
         var name = this._name;
@@ -375,6 +383,7 @@ class File {
      * @readonly
      * The parent directory of this file. For example, for "/foo/bar/baz" the `parent` is
      * "/foo/bar". This is `null` for the file system root.
+     * Typically known as `dirname` on unix-like systems.
      */
     get parent () {
         var parent = this._parent;
@@ -397,7 +406,7 @@ class File {
      * @property {String} extent
      * @readonly
      * The type of the file at the end of the path. For example, given "/foo/bar/baz.js",
-     * the `extent` is "js".
+     * the `extent` is "js". Returns `''` for files with no extension (e.g. README).
      */
     get extent () {
         var ext = this._extent;
@@ -415,18 +424,35 @@ class File {
     //-----------------------------------------------------------------
     // Path calculation
 
+    /**
+     * Return absolute path to this file
+     * @returns {String} the absolute path to this file.
+     */
     absolutePath () {
         return Path.resolve(this.path);
     }
 
+    //noinspection JSUnusedGlobalSymbols
+    /**
+     * Returns a file instance created from the absolute path
+     * @returns {File} The `File` instance.
+     */
     absolutify () {
         return File.from(this.absolutePath()); // null/blank handling
     }
 
+    /**
+     * Returns the canonical path to this file
+     * @returns {String} The canonical path to this file.
+     */
     canonicalPath () {
         return Fs.realpathSync(Path.resolve(this.path));
     }
 
+    /**
+     * Returns a file instance created from the canonical path
+     * @returns {File} The `File` instance.
+     */
     canonicalize () {
         return File.from(this.canonicalPath()); // null/blank handling
     }
@@ -2051,7 +2077,7 @@ class Win {
             if (!fswin.getAttributes(path, process)) {
                 reject(new Error(`Cannot get attributes for ${path}`));
             }
-        });
+        })
     }
 
     static attrib (path) {
@@ -2093,6 +2119,7 @@ Win.attributes = [
 ];
 
 if (File.WIN) {
+    fswin = require('fswin');
     File.Win = Win;
 
     re.split = /[\/\\]/g;
