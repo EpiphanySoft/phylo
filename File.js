@@ -1903,7 +1903,7 @@ File.Loader = class {
 
     _parse (filename, data) {
         try {
-            return this.parse(data);
+            return this.parse(data, this);
         }
         catch (e) {
             e.message = `Cannot parse ${filename}: ${e.message}`;
