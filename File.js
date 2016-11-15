@@ -9,7 +9,7 @@ const platform = OS.platform();
 
 const re = {
     slash: /\\/g,
-    split: /[\/\\]/g
+    split: /[\/]/g
 };
 
 /**
@@ -141,12 +141,12 @@ class File {
      * @param {String/File} file The `File` instance of path as a string.
      * @return {FileAccess}
      */
-    static access (file) {
+    static access (file, strict) {
         if (!file) {
             return null;
         }
 
-        return File.from(file).access();
+        return File.from(file).access(strict);
     }
 
     /**
@@ -179,7 +179,7 @@ class File {
         var file = path || null;
 
         if (file && !file.$isFile) {
-            file = new File(path);
+            file = new this(path);
         }
 
         return file;
@@ -192,7 +192,7 @@ class File {
      * @return {File} The `os.homedir()` as a `File` instance.
      */
     static home () {
-        return new File(OS.homedir());
+        return new this(OS.homedir());
     }
 
     /**
@@ -418,7 +418,7 @@ class File {
     }
 
     absolutify () {
-        return File.from(this.absolutePath());
+        return File.from(this.absolutePath()); // null/blank handling
     }
 
     canonicalPath () {
@@ -426,7 +426,7 @@ class File {
     }
 
     canonicalize () {
-        return File.from(this.canonicalPath());
+        return File.from(this.canonicalPath()); // null/blank handling
     }
 
     joinPath (...parts) {
@@ -439,10 +439,14 @@ class File {
 
     lastSeparator () {
         var path = this.path,
-            i = path.lastIndexOf('/'),
-            j = path.lastIndexOf('\\');
+            i = path.lastIndexOf('/');
 
-        return (i > j) ? i : j;
+        if (File.Win) {
+            // Windows respects both / and \ as path separators
+            i = Math.max(i, path.lastIndexOf('\\'));
+        }
+
+        return i;
     }
 
     nativePath (separator) {
@@ -466,10 +470,10 @@ class File {
 
     relativePath (path) {
         if (path.$isFile) {
-            path = path.getCanonicalPath();
+            path = path.absolutePath();
         }
 
-        let p = this.canonicalPath();
+        let p = this.absolutePath();
 
         return p && path && Path.relative(p, path);
     }
@@ -556,6 +560,11 @@ class File {
             let a = this.slashify().unterminatedPath();
             let b = subPath.slashifiedPath();
 
+            if (!File.CASE) {
+                a = a.toLowerCase();
+                b = b.toLowerCase();
+            }
+
             if (a.startsWith(b)) {
                 // a = "/foo/bar"
                 // b = "/foo/bar/zip" ==> true
@@ -568,16 +577,16 @@ class File {
     }
 
     compare (other) {
+        other = File.from(other);
+
         if (!other) {
             return 1;
         }
 
-        other = File.from(other);
-
         if (this._stat && other._stat) {
             let p = this.parent;
 
-            if (p.equals(other.parent)) {
+            if (p && p.equals(other.parent)) {
                 // Two files in the same parent folder both w/stats
                 let d1 = this._stat.isDirectory();
                 let d2 = other._stat.isDirectory();
@@ -590,7 +599,9 @@ class File {
 
         // Treat "/foo/bar" and "/foo/bar/" as equal (by stripping trailing delimiters)
         let a = this.unterminatedPath();
-        let b = other && other.unterminatedPath() || '';
+        let b = other.unterminatedPath();
+
+        // TODO locale
 
         // If the platform has case-insensitive file names, ignore case...
         if (!File.CASE) {
@@ -939,7 +950,7 @@ class File {
      * Searches upwards for a folder that has the specified sub-directory and returns a
      * `File` describing the sub-directory.
      *
-     *      f = file.upDir('.git');
+     *      f = file.upToDir('.git');
      *
      *      // f references the ".git" folder.
      *
@@ -959,7 +970,7 @@ class File {
     /**
      * Searches upwards for a folder that has the specified file.
      *
-     *      f = file.upFile('package.json');
+     *      f = file.upToFile('package.json');
      *
      *      // f references the ".git" folder.
      *
@@ -1268,10 +1279,14 @@ class File {
             var fail = e => {
                 if (reject) {
                     reject(e);
-                    reject = null;
+                    reject = resolve = null;
                 }
             };
             var finish = () => {
+                if (!resolve) {
+                    return;
+                }
+
                 reject = null;
 
                 if (options.f) {
@@ -1311,6 +1326,7 @@ class File {
                 }
 
                 resolve(result);
+                resolve = null;
             };
 
             var attribMap, result = [];
@@ -1434,12 +1450,12 @@ class File {
                     }
                 }
 
-                if (attribMap) {
-                    st.attribs = attrib;
-                }
-
                 if (options.cachify) {
                     f._stat = st;
+
+                    if (attribMap) {
+                        st.attribs = attrib;
+                    }
                 }
             }
 
@@ -1459,32 +1475,82 @@ class File {
     asyncLoad (options) {
         let loader = this.getLoader(options);
 
-        return loader.asyncLoad(this, options);
+        return loader.asyncLoad(this);
     }
 
     getLoader (options) {
-        let loader;
+        let loader, opts, type;
 
         if (options) {
-            if (options.type) {
-                loader = File.loaders[options.type];
+            if (typeof options === 'string') {
+                type = options;
+            }
+            else {
+                type = options.type;
+                opts = options;
+
+                if (type) {
+                    opts = Object.assign({}, options);
+                    delete opts.type;
+                }
+            }
+
+            if (type) {
+                loader = File.loaders[type];
                 if (!loader) {
-                    throw new Error(`No such loader as "${options.type}"`);
+                    throw new Error(`No such loader as "${type}"`);
                 }
             }
         }
 
         if (!loader) {
-            loader = File.loaders[this.extent] || File.loaders.text; // eg "json"
+            loader = File.loaders[this.extent] || File.loaders.text; // eg extent="json"
+        }
+
+        if (opts) {
+            loader = loader.extend(opts);
         }
 
         return loader;
     }
 
+    /**
+     * For example:
+     *
+     *      file.load();  // default loader
+     *
+     *      file.load('binary');  // use binary loader
+     *
+     *      file.load('text');  // use text loader
+     *
+     *      file.load({
+     *          split: /\n/g  // default type but w/split config
+     *      });
+     *
+     *      file.load({
+     *          type: 'text',
+     *          split: /\n/g
+     *      });
+     *
+     *      file.load({
+     *          type: 'text',
+     *          encoding: 'utf16'  // encoding can be on loader config
+     *      });
+     *
+     *      file.load({
+     *          type: 'text',
+     *          options: {  // raw fs options
+     *              encoding: 'utf16'
+     *          }
+     *      });
+     *
+     * @param {String/Object} [options]
+     * @return {*}
+     */
     load (options) {
         let loader = this.getLoader(options);
 
-        return loader.load(this, options);
+        return loader.load(this);
     }
 
     //------------------------------------------------------------------------
@@ -1519,12 +1585,16 @@ File.Loader = class {
         var loader = Object.create(this);
 
         if (config) {
-            let options = config.options;
-
             Object.assign(loader, config);
 
-            if (options) {
-                loader.options = this.getOptions(options);
+            loader.options = this.getOptions(config.options || {});
+
+            if (!config.options) {
+                // If the user didn't supply specific fs options, see about encoding
+                if (config.encoding) {
+                    // loader.options is always a safe copy we can adjust...
+                    loader.options.encoding = config.encoding;
+                }
             }
         }
 
@@ -1542,17 +1612,15 @@ File.Loader = class {
         return ret;
     }
 
-    asyncLoad (filename, options) {
-        options = this.getOptions(options);
-
-        return this.asyncRead(filename, options).then(data => {
-            return this._parse(filename, data, options);
+    asyncLoad (filename) {
+        return this.asyncRead(filename).then(data => {
+            return this._parse(filename, data);
         });
     }
 
-    asyncRead (filename, options) {
+    asyncRead (filename) {
         return new Promise((resolve, reject) => {
-            Fs.readFile(File.path(filename), options, (err, data) => {
+            Fs.readFile(File.path(filename), this.options, (err, data) => {
                 if (err) {
                     reject(err);
                 }
@@ -1563,12 +1631,10 @@ File.Loader = class {
         });
     }
 
-    load (filename, options) {
-        options = this.getOptions(options);
+    load (filename) {
+        var data = this.read(filename);
 
-        var data = this.read(filename, options);
-
-        return this._parse(filename, data, options);
+        return this._parse(filename, data);
     }
 
     parse (data) {
@@ -1581,13 +1647,13 @@ File.Loader = class {
         return data;
     }
 
-    read (filename, options) {
-        return Fs.readFileSync(File.path(filename), options);
+    read (filename) {
+        return Fs.readFileSync(File.path(filename), this.options);
     }
 
-    _parse (filename, data, options) {
+    _parse (filename, data) {
         try {
-            return this.parse(data, options);
+            return this.parse(data);
         }
         catch (e) {
             e.message = `Cannot parse ${filename}: ${e.message}`;
@@ -1613,6 +1679,10 @@ File.loaders.json = File.loaders.text.extend({
     parse (data) {
         return JSON.parse(data);
     }
+});
+
+['js','ts','coffee'].forEach(ext => {
+    File.loaders[ext] = File.loaders.text.extend();
 });
 
 const proto = File.prototype;
@@ -1724,10 +1794,10 @@ function addTypeTest (name, statMethod, statMethodAsync) {
     const prop = '_' + name;
 
     statMethod = statMethod || 'stat';
-    statMethodAsync = statMethodAsync || 'getStat';
+    statMethodAsync = statMethodAsync || 'asyncStat';
     proto[prop] = null;
 
-    proto['get' + name[0].toUpperCase() + name.substr(1)] = function () {
+    proto['async' + name[0].toUpperCase() + name.substr(1)] = function () {
         let value = this[prop];
 
         if (value !== null) {
@@ -1752,7 +1822,7 @@ function addTypeTest (name, statMethod, statMethodAsync) {
     };
 }
 
-addTypeTest('isSymbolicLink', 'statLink');
+addTypeTest('isSymbolicLink', 'statLink', 'asyncStatLink');
 
 [
     'isBlockDevice', 'isCharacterDevice', 'isDirectory', 'isFile', 'isFIFO',
@@ -1962,6 +2032,8 @@ if (File.WIN) {
 
     File.Win = Win;
     File.WinAsync = WinAsync;
+
+    re.split = /[\/\\]/g;
 
     console.log(`File.Win.exe = ${Win.exe}`);
 }
