@@ -1527,6 +1527,64 @@ class File {
     //------------------------------------------------------------------------
     // File System Walking
 
+    /**
+     * This method asynchronously descends the file-system starting with this folder
+     * checking for folders that match the specified `test`. See `tips` for details.
+     *
+     * @param {String} [mode] The `list` mode that controls directory listings.
+     * @param {String/Function} test The test function to call or the string to pass to
+     * `has`. If a function, the meaning is the same as with `tips` except that this
+     * function can return a Promise.
+     * @param {File} test.file The file object referencing the current file or folder
+     * to examine.
+     * @param {Object} test.state The current directory traversal state object. See
+     * `walk`.
+     * @param {Boolean} test.return Return `true` for a match to include the `file` and
+     * avoid descent into the directory.
+     * @return {File[]} The files that passed the `test`.
+     */
+    asyncTips (mode, test) {
+        if (!test) {
+            test = mode;
+            mode = '';
+        }
+
+        var fn = (typeof test === 'string') ? f => f.has(test) : test;
+        var ret = [];
+
+        return this.asyncWalk(mode, (f, state) => {
+            // If fn throws that is OK since asyncWalk has a try/catch to map it
+            // to a Promise rejection...
+            return Promise.resolve(fn(f, state)).then(r => {
+                if (r) {
+                    ret.push(f);
+                    return false;  // don't descend
+                }
+            });
+        }).then(() => ret);
+    }
+
+    /**
+     * Asynchronously descends the file-system starting with the current location, calling
+     * the provided `handler` for each file or folder.
+     *
+     * @param {String} [mode] The directory `list` mode string to control the traversal.
+     * @param {Function} handler A function that will be called for each file/folder
+     * starting with this instance. This is the same `handler` provided to the `walk`
+     * method except that this function can return a Promise.
+     * @param {File} handler.file The file object referencing the current file or folder
+     * to examine.
+     * @param {Object} handler.state The state object tracking the traversal.
+     * @param {File} handler.state.at The current `file` instance.
+     * @param {File} handler.state.previous The file instance passed to the `handler` on
+     * the previous call.
+     * @param {File[]} handler.state.stack The traversal stack of file objects from the
+     * starting instance to the current folder.
+     * @param {Boolean} handler.state.stop Set to `true` to abort the traversal.
+     * @param {Promise<Boolean>} handler.return Return `false` to not descend into a folder.
+     * @return {Promise<Object>} A promise that resolves to the `state` object after the
+     * traversal is complete.
+     */
     asyncWalk (mode, handler) {
         if (!handler) {
             handler = mode;
@@ -1586,13 +1644,29 @@ class File {
     }
 
     /**
+     * This method descends the file-system starting with this folder checking for folders
+     * that match the specified `test`. When a folder matches, it is accumulated into the
+     * result array that is returned and the sub-tree is descended no further (that is the
+     * "tip" of a matching sub-tree).
+     *
      * For example:
      *
      *      var packageDirs = dir.tips('package.json');
      *
-     * @param mode
-     * @param test
-     * @returns {Array}
+     * Finds all folders at "dir" or below that matches `has('package.json')`. When such
+     * folders are found, no further descent is performed. In this case that will avoid
+     * the "node_modules" sub-folder of such folders.
+     *
+     * @param {String} [mode] The `list` mode that controls directory listings.
+     * @param {String/Function} test The test function to call or the string to pass to
+     * `has`.
+     * @param {File} test.file The file object referencing the current file or folder
+     * to examine.
+     * @param {Object} test.state The current directory traversal state object. See
+     * `walk`.
+     * @param {Boolean} test.return Return `true` for a match to include the `file` and
+     * avoid descent into the directory.
+     * @return {File[]} The files that passed the `test`.
      */
     tips (mode, test) {
         if (!test) {
@@ -1614,9 +1688,25 @@ class File {
     }
 
     /**
+     * Synchronously processes the current file and (if it is a directory) all child
+     * files or folders. Each `file` is passed along with a `state` object to the given
+     * `handler` for processing. The `handler` should return `false` to not recurse into
+     * a directory.
      *
-     * @param mode
-     * @param handler
+     * @param {String} [mode] The directory `list` mode string to control the traversal.
+     * @param {Function} handler A function that will be called for each file/folder
+     * starting with this instance.
+     * @param {File} handler.file The file object referencing the current file or folder
+     * to examine.
+     * @param {Object} handler.state The state object tracking the traversal.
+     * @param {File} handler.state.at The current `file` instance.
+     * @param {File} handler.state.previous The file instance passed to the `handler` on
+     * the previous call.
+     * @param {File[]} handler.state.stack The traversal stack of file objects from the
+     * starting instance to the current folder.
+     * @param {Boolean} handler.state.stop Set to `true` to abort the traversal.
+     * @param {Boolean} handler.return Return `false` to not descend into a folder.
+     * @return {Object} The state object used for the traversal.
      */
     walk (mode, handler) {
         if (!handler) {
@@ -1946,22 +2036,12 @@ proto.asyncIsSymLink = proto.asyncIsSymbolicLink;
 
 //------------------------------------------------------------
 
-const dateParts = [
-    'birthtime',
-    'atime',
-    'mtime'
-];
-
-//              attrib    ctime  atime  mtime  size   name
-//              [1]       [2]    [3]    [4]    [5]    [6]
-re.statLine = /^([A-Z]+)\t(\d+)\t(\d+)\t(\d+)\t(\d+)\t(.+)$/;
-
 class Win {
     static asyncAttrib (path) {
         return new Promise((resolve, reject) => {
             var process = results => {
                 if (results) {
-                    resolve(Win.convertAttr(results[0]));
+                    resolve(Win.convertAttr(results));
                 }
                 else {
                     reject(new Error(`Cannot get attributes for ${path}`));
@@ -1994,22 +2074,22 @@ class Win {
 }
 
 Win.attributes = [
-    //IS_DEVICE: false,
-    //IS_NOT_CONTENT_INDEXED: true,
-    //IS_OFFLINE: false,
-    //IS_SPARSE_FILE: false,
-    //IS_TEMPORARY: false,
-    //IS_INTEGRITY_STREAM: false,
-    //IS_NO_SCRUB_DATA: false,
-    //IS_REPARSE_POINT: ''
+    //IS_DEVICE
+    //IS_NOT_CONTENT_INDEXED
+    //IS_SPARSE_FILE
+    //IS_TEMPORARY
+    //IS_INTEGRITY_STREAM
+    //IS_NO_SCRUB_DATA
+    //IS_REPARSE_POINT
 
-    [ 'IS_ARCHIVED',   'A' ],
-    [ 'IS_COMPRESSED', 'C' ],
-    [ 'IS_DIRECTORY',  'D' ],
-    [ 'IS_ENCRYPTED',  'E' ],
-    [ 'IS_HIDDEN',     'H' ],
-    [ 'IS_READ_ONLY',  'R' ],
-    [ 'IS_SYSTEM',     'S' ]
+    [ 'IS_ARCHIVED',    'A' ],
+    [ 'IS_COMPRESSED',  'C' ],
+    [ 'IS_DIRECTORY',   'D' ],
+    [ 'IS_ENCRYPTED',   'E' ],
+    [ 'IS_HIDDEN',      'H' ],
+    [ 'IS_OFFLINE',     'O' ],
+    [ 'IS_READ_ONLY',   'R' ],
+    [ 'IS_SYSTEM',      'S' ]
 ];
 
 if (File.WIN) {
@@ -2047,8 +2127,10 @@ console.log(`profile: ${File.profile('Acme')}`);
 //     files.forEach(f => console.log('dir: ', f.path));
 // });
 
-f.walk('A', (item, state) => {
+f.asyncWalk('Ad', (item, state) => {
     console.log(`${' '.repeat(state.stack.length * 4)}${item.name} - ${item._stat ? item._stat.attribs : ''}`);
+}).then(() => {
+    console.log('done');
 });
 
 // let pkg = f.upToFile('package.json');
