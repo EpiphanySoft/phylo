@@ -4,6 +4,7 @@ const Fs = require('fs');
 const OS = require('os');
 const Path = require('path');
 const ChildProcess = require('child_process');
+const json5 = require('json5');
 
 const platform = OS.platform();
 
@@ -1218,8 +1219,8 @@ class File {
     //-----------------------------------------------------------------
     // Directory Listing
 
-    _parseListMode (mode) {
-        var options = this._parseMode({
+    static _parseListMode (mode) {
+        var options = File._parseMode({
             A: false,
             a: true,
             d: false,
@@ -1246,7 +1247,7 @@ class File {
         return options;
     }
 
-    _parseMode (flags, mode) {
+    static _parseMode (flags, mode) {
         let enable = null;
 
         for (let i = 0, n = mode && mode.length; i < n; ++i) {
@@ -1273,7 +1274,7 @@ class File {
     }
 
     asyncList (mode) {
-        var options = this._parseListMode(mode);
+        var options = File._parseListMode(mode);
 
         return new Promise((resolve, reject) => {
             var fail = e => {
@@ -1415,7 +1416,7 @@ class File {
      * @return {File[]}
      */
     list (mode) {
-        var options = this._parseListMode(mode);
+        var options = File._parseListMode(mode);
         var names = Fs.readdirSync(this.path);
         var attribMap = options.attribs && Win.attribMap(this.join('*').path);
         var ret = [];
@@ -1555,6 +1556,12 @@ class File {
 
     //------------------------------------------------------------------------
 
+    walk () {
+        //
+    }
+
+    //------------------------------------------------------------------------
+
     _async (name, fn) {
         var pending = this[name];
 
@@ -1677,7 +1684,11 @@ File.loaders.txt = File.loaders.text;
 
 File.loaders.json = File.loaders.text.extend({
     parse (data) {
-        return JSON.parse(data);
+        // Handles comments, single-quoted strings, unquoted object keys etc.. In
+        // general, JSON5 is a very relaxed form of JSON that accepts all valid JSON
+        // files and goes beyond to a nearly proper JavaScript-subset. All w/o eval
+        // so it is secure.
+        return json5.parse(data);
     }
 });
 
