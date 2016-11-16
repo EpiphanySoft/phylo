@@ -1,6 +1,5 @@
 'use strict';
 
-// TODO mkdirs
 // TODO rm -rf
 // TODO write
 
@@ -8,14 +7,40 @@ const Fs = require('fs');
 const OS = require('os');
 const Path = require('path');
 const json5 = require('json5');
+const mkdirp = require('mkdirp');
+
 let fswin;
 
 const platform = OS.platform();
 
 const re = {
+    absy: /^~{1,2}[\/\\]/,
+    homey: /^~[\/\\]/,
+    profiley: /^~~[\/\\]/,
     slash: /\\/g,
     split: /[\/]/g
 };
+
+function detildify (p) {
+    if (p) {
+        if (p === '~') {
+            p = OS.homedir();
+        }
+        else if (p === '~~') {
+            p = File.profile().path;
+        }
+        else if (re.homey.test(p)) {
+            // if (p starts with "~/" or "~\\")
+            p = Path.join(OS.homedir(), p.substr(1));
+        }
+        else if (re.profiley.test(p)) {
+            // if (p starts with "~~/" or "~~\\")
+            p = File.profile().join(p.substr(2)).path;
+        }
+    }
+
+    return p;
+}
 
 /**
  * @class FileAccess
@@ -43,15 +68,6 @@ const re = {
  *      }
  *
  * Or using `File`:
- *
- *      // file is a File instance
- *
- *      if (file.access().rw) {
- *          // file is R and W
- *      }
- *      // else file is missing R and/or W
- *
- * Or:
  *
  *      // file is a File instance
  *
@@ -145,15 +161,14 @@ class File {
      * specified file. This will be `null` if the file does not exist.
      *
      * @param {String/File} file The `File` instance of path as a string.
-     * @param {boolean} [strict=false] Pass `true` to throw exceptions on failure.
      * @return {FileAccess} The `FileAccess` descriptor.
      */
-    static access (file, strict) {
+    static access (file) {
         if (!file) {
             return null;
         }
 
-        return File.from(file).access(strict);
+        return File.from(file).access();
     }
 
     /**
@@ -322,8 +337,10 @@ class File {
             let p = parts[i];
 
             if (p.$isFile) {
-                parts[i] = p.path;
+                p = p.path;
             }
+
+            parts[i] = detildify(p);
         }
 
         return (parts && parts.length && Path.resolve(...parts)) || '';
@@ -343,7 +360,7 @@ class File {
      * Compares two files using the `File` instances' `compare` method.
      * @param file1 A `File` instance.
      * @param file2 A `File` instance.
-     * @returns {number} te result of the comparison.
+     * @return {Number}
      */
     static sorter (file1, file2) {
         var a = File.from(file1);
@@ -394,10 +411,18 @@ class File {
 
         if (parent === undefined) {
             let path = this.path;
-            let ret = Path.resolve(path, '..');
+            let sep = this.lastSeparator();
+            let ret;
 
-            if (path === ret) {
-                ret = null;
+            if (sep < 0) {
+                ret = File.resolvePath(path, '..');
+
+                if (path === ret) {
+                    ret = null;
+                }
+            }
+            else {
+                ret = path.substr(0, sep);
             }
 
             this._parent = parent = ret && new File(ret);
@@ -425,21 +450,31 @@ class File {
         return ext;
     }
 
+    /**
+     * @property {String} fspath
+     * @readonly
+     * The same as `path` property except resolved for `"~"` pseudo-roots and hence
+     * useful for `fs` module calls.
+     */
+    get fspath () {
+        return detildify(this.path);
+    }
+
     //-----------------------------------------------------------------
     // Path calculation
 
     /**
-     * Return absolute path to this file
-     * @returns {String} the absolute path to this file.
+     * Return absolute path to this file.
+     * @return {String}
      */
     absolutePath () {
-        return Path.resolve(this.path);
+        return File.resolvePath(this.path);
     }
 
     //noinspection JSUnusedGlobalSymbols
     /**
-     * Returns a file instance created from the absolute path
-     * @returns {File} The `File` instance.
+     * Returns a `File` instance created from the `absolutePath`.
+     * @return {File}
      */
     absolutify () {
         return File.from(this.absolutePath()); // null/blank handling
@@ -448,10 +483,10 @@ class File {
     asyncCanonicalPath () {
         let path = this.absolutePath();
 
-        return new Promise((resolve, reject) => {
+        return new Promise(resolve => {
             Fs.realpath(path, (err, result) => {
                 if (err) {
-                    reject(new Error(`Cannot determine canonical path of "${path}" - ${err.message || err}`));
+                    resolve(null);
                 }
                 else {
                     resolve(result);
@@ -462,21 +497,25 @@ class File {
 
     asyncCanonicalize () {
         return this.asyncCanonicalPath().then(path => {
-            return new File(path);
+            return File.from(path);
         });
     }
 
     /**
-     * Returns the canonical path to this file
-     * @returns {String} The canonical path to this file.
+     * Returns the canonical path to this file.
+     * @return {String} The canonical path of this file or `null` if no file exists.
      */
     canonicalPath () {
-        return Fs.realpathSync(Path.resolve(this.path));
+        try {
+            return Fs.realpathSync(this.absolutePath());
+        } catch (e) {
+            return null;
+        }
     }
 
     /**
-     * Returns a file instance created from the canonical path
-     * @returns {File} The `File` instance.
+     * Returns a `File` instance created from the canonical path
+     * @return {File} The `File` with the canonical path or `null` if no file exists.
      */
     canonicalize () {
         return File.from(this.canonicalPath()); // null/blank handling
@@ -649,15 +688,14 @@ class File {
 
     isAbsolute () {
         var p = this.path;
-        return p ? Path.isAbsolute(p) : false;
+        return p ? re.absy.test(p) || Path.isAbsolute(p) : false;
     }
 
     isRelative () {
-        var p = this.path;
-        return p ? !Path.isAbsolute(p) : false;
+        return this.path ? !this.isAbsolute() : false;
     }
 
-    prefixOf (subPath) {
+    prefixes (subPath) {
         subPath = File.from(subPath);
 
         if (subPath) {
@@ -685,8 +723,8 @@ class File {
     // File system checks
 
     /**
-     * Returns a `FileAccess` object describing the access available for this file. If the
-     * file does not exist, `null` is returned.
+     * Returns a `FileAccess` object describing the access available for this file. If
+     * the file does not exist, `null` is returned.
      *
      *      var acc = File.from(s).access();
      *
@@ -703,11 +741,10 @@ class File {
      *          // file at location s has R and W permission
      *      }
      *
-     * @param {Boolean} [strict] Pass `true` to throw exceptions on failure.
      * @return {FileAccess}
      */
-    access (strict) {
-        var st = this.stat(strict);
+    access () {
+        var st = this.stat();
 
         if (st === null) {
             return null;
@@ -862,7 +899,7 @@ class File {
         let ret = this._stat;
 
         if (!ret) {
-            let path = this.path;
+            let path = this.fspath;
 
             try {
                 ret = Fs.statSync(path);
@@ -893,7 +930,7 @@ class File {
         let ret = this._stat;
 
         if (!ret) {
-            let path = this.path;
+            let path = this.fspath;
 
             try {
                 ret = Fs.lstatSync(path);
@@ -1194,7 +1231,7 @@ class File {
             return Promise.resolve(this._stat);
         }
 
-        let path = this.path;
+        let path = this.fspath;
 
         return this._async('_asyncStat', () => {
             return new Promise(resolve => {
@@ -1241,7 +1278,7 @@ class File {
             return Promise.resolve(this._stat);
         }
 
-        let path = this.path;
+        let path = this.fspath;
 
         return this._async('_asyncStatLink', () => {
             return new Promise(resolve => {
@@ -1268,7 +1305,7 @@ class File {
     }
 
     //-----------------------------------------------------------------
-    // Directory Listing
+    // Directory Operations
 
     static _parseListMode (mode) {
         if (mode && mode.constructor === Object) {
@@ -1282,7 +1319,8 @@ class File {
             l: false,
             o: true,
             s: false,
-            w: false
+            w: false,
+            T: false
         }, mode);
 
         options.hideDots = File.Win ? !options.w : true;
@@ -1323,11 +1361,18 @@ class File {
 
         return new Promise((resolve, reject) => {
             var fail = e => {
-                if (reject) {
-                    reject(e);
-                    reject = resolve = null;
+                if (options.T) {
+                    if (reject) {
+                        reject(e);
+                    }
                 }
+                else if (resolve) {
+                    resolve(null);
+                }
+
+                reject = resolve = null;
             };
+
             var finish = () => {
                 if (!resolve) {
                     return;
@@ -1372,9 +1417,14 @@ class File {
 
             var result = [];
 
-            Fs.readdir(this.path, (err, names) => {
+            Fs.readdir(this.fspath, (err, names) => {
                 if (err) {
-                    reject(err);
+                    if (options.T) {
+                        reject(err);
+                    }
+                    else {
+                        resolve(null);
+                    }
                     return;
                 }
 
@@ -1443,14 +1493,27 @@ class File {
      *  - **w** Indicates that Windows hidden flag alone determines hidden status
      *   (default is `false` so that files names starting with dots are hidden on all
      *   platforms).
+     *  - **T** Throw on failure instead of return `null`.
      *
      * @param {String} mode A string containing the mode characters described above.
      * @return {File[]}
      */
     list (mode) {
         var options = File._parseListMode(mode);
-        var names = Fs.readdirSync(this.path);
         var ret = [];
+        var names;
+
+        if (options.T) {
+            names = Fs.readdirSync(this.fspath);
+        }
+        else {
+            try {
+                names = Fs.readdirSync(this.fspath);
+            }
+            catch (e) {
+                return null;
+            }
+        }
 
         for (let i = 0, n = names.length; i < n; ++i) {
             let name = names[i];
@@ -1492,6 +1555,44 @@ class File {
         }
 
         return ret;
+    }
+
+    /**
+     * Ensures this directory exists, creating any directories in this path as needed.
+     *
+     * Though there is no assurance it will always do so, this method uses the `mkdirp`
+     * module to perform this operation.
+     * @param {Number} mode The access mode as defined by `fs.mkdir`.
+     * @return {File} This file instance
+     * @chainable
+     */
+    mkdir (mode) {
+        mkdirp.sync(this.fspath, {
+            mode: mode
+        });
+
+        return this;
+    }
+
+    /**
+     * Ensures this directory exists, creating any directories in this path as needed.
+     *
+     * Though there is no assurance it will always do so, this method uses the `mkdirp`
+     * module to perform this operation.
+     * @param {Number} mode The access mode as defined by `fs.mkdir`.
+     * @return {Promise<File>} A Promise to this file instance.
+     */
+    asyncMkdir (mode) {
+        return new Promise((resolve, reject) => {
+            mkdirp(this.fspath, { mode: mode }, err => {
+                if (err) {
+                    reject(err);
+                }
+                else {
+                    resolve(this);
+                }
+            });
+        })
     }
 
     //-----------------------------------------------------------------
@@ -1870,7 +1971,7 @@ File.Loader = class {
 
     asyncRead (filename) {
         return new Promise((resolve, reject) => {
-            Fs.readFile(File.path(filename), this.options, (err, data) => {
+            Fs.readFile(File.from(filename).fspath, this.options, (err, data) => {
                 if (err) {
                     reject(err);
                 }
@@ -1898,7 +1999,7 @@ File.Loader = class {
     }
 
     read (filename) {
-        return Fs.readFileSync(File.path(filename), this.options);
+        return Fs.readFileSync(File.from(filename).fspath, this.options);
     }
 
     _parse (filename, data) {
@@ -2147,7 +2248,9 @@ Win.attributes = [
 ];
 
 if (File.WIN) {
+    // Cannot require at file-scope since it wrecks non-Windows platforms:
     fswin = require('fswin');
+    
     File.Win = Win;
 
     re.split = /[\/\\]/g;
