@@ -37,11 +37,11 @@ Compare to `File`:
         // climb up...
     }
 
+## Conventions
+
 It is intended that a `File` instance immutably describes a single path. What is
 (or is not) on disk at that location can change of course, but the description is
 constant.
-
-## Conventions
 
 The `File` API strives to be purely consistent on these points:
 
@@ -54,8 +54,8 @@ The `File` API strives to be purely consistent on these points:
 ## Path Manipulation
 
 Much of the functionality provided by the `File` class is in the form of "lexical"
-path manipulation. These method are only provided in synchronous form since they
-operate on path strings (like the `path` module).
+path manipulation. These are only provided in synchronous form since they operate on
+path strings (like the `path` module).
 
 ### Properties
 
@@ -136,9 +136,10 @@ Some useful information about a file path:
 To get information about the file on disk:
 
  - `access()` - Returns a `FileAccess` object or `null` if the file doesn't exist.
- - `can(mode)` - Returns `true` if the file exists and has the desired access mode.
+ - `can(mode)` - Returns `true` if this exists with the desired access (`mode` is "r",
+  "rw", "rwx", "w", "wx" or "x").
  - `exists()` - Returns `true` if the file exists.
- - `has(rel)` - Returns `true` if a file or foledr exists at the `rel` path from this file.
+ - `has(rel)` - Returns `true` if a file or folder exists at the `rel` path from this file.
  - `hasDir(rel)` - Returns `true` if a folder exists at the `rel` path from this file.
  - `hasFile(rel)` - Returns `true` if a file exists at the `rel` path from this file.
  - `isHidden()` - Returns `true` if this file does not exist or is hidden.
@@ -211,7 +212,7 @@ same properties as boolean values. The full set of properties is a bit larger:
 ### Classification
 
 It is often important to know if a file is a directory or other type of entity. This
-information is fundamentally a result of the `stat()` family but for convenience are
+information is fundamentally a result of the `stat()` family but for convenience is
 also provided on the `File` instance:
 
  - `isDirectory`
@@ -293,14 +294,15 @@ To climb the file-system to find a parent folder that passes a `test` function o
 has a particular file or folder relatively locatable from there:
 
  - `up(test)` - Starting at this, climb until `test` passes.
- - `upDir(rel)` - Use `up()` with `hasDir(rel)` as the `test.
- - `upFile(rel)` - Use `up()` with `hasFile(rel)` as the `test.
+ - `upDir(rel)` - Use `up()` with `hasDir(rel)` as the `test`.
+ - `upFile(rel)` - Use `up()` with `hasFile(rel)` as the `test`.
 
 To climb the file-system and find a relatively locatable item:
 
- - `upTo(rel)` - Starting at this, climb until `has(rel)` and `join(rel)` from there.
- - `upDir(rel)` - Same as `upTo()` but using `hasDir(rel)` as the `test.
- - `upFile(rel)` - Same as `upTo()` but using `hasFile(rel)` as the `test.
+ - `upTo(rel)` - Starting at this, climb until `has(rel)` is `true` and then return
+  `join(rel)` from that location.
+ - `upDir(rel)` - Same as `upTo()` but using `hasDir(rel)` as the `test`.
+ - `upFile(rel)` - Same as `upTo()` but using `hasFile(rel)` as the `test`.
 
 The different between these forms can be seen best by example:
 
@@ -396,7 +398,21 @@ To loading using `File`:
 
     var data = pkg.load();  // a parsed Object
 
-Or we can override the file type:
+The basic advantage of the `File` approach is the error messages you get when
+things go wrong. Using the first snippet you would get errors like these (based
+on the parser used):
+
+    Unexpected number in JSON at position 427
+
+Using `load()` the message would be:
+
+    Cannot parse ~/code/package.json: Unexpected number in JSON at position 427
+
+With `File` there is hope in tracking down what has gone wrong.
+
+### Loader Options
+
+The default loader is based on the file's type, but we can override this:
     
     var data = pkg.load('text'); // load as a simple text (not parsed)
     

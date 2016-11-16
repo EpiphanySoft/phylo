@@ -3,10 +3,15 @@
 const File = require('./File');
 File.COMPANY = 'Foobar';
 
+var f;
+
 console.log(`home: ${File.home()}`);
 console.log(`profile: ${File.profile('Acme')}`);
 
-var f = new File('~/.sencha');
+f = File.cwd().upTo('package.json').load();
+console.log(`package ${f.name}`);
+
+f = new File('~/.sencha');
 
 console.log(`f: ${f}`);
 console.log(`f.abssolute: ${f.absolutePath()}`);
