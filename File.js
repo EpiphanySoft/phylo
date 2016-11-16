@@ -1,6 +1,8 @@
 'use strict';
 
 // TODO rm -rf
+// TODO sanitize
+// TODO temp (see tmp module)
 // TODO write
 
 const Fs = require('fs');
@@ -9,14 +11,14 @@ const Path = require('path');
 const json5 = require('json5');
 const mkdirp = require('mkdirp');
 
-let fswin;
+let fswin;  // cannot load here or (boom) on non-Windows
 
 const platform = OS.platform();
 
 const re = {
-    absy: /^~{1,2}[\/\\]/,
+    abs: /^~{1,2}[\/\\]/,
     homey: /^~[\/\\]/,
-    profiley: /^~~[\/\\]/,
+    profile: /^~~[\/\\]/,
     slash: /\\/g,
     split: /[\/]/g
 };
@@ -33,7 +35,7 @@ function detildify (p) {
             // if (p starts with "~/" or "~\\")
             p = Path.join(OS.homedir(), p.substr(1));
         }
-        else if (re.profiley.test(p)) {
+        else if (re.profile.test(p)) {
             // if (p starts with "~~/" or "~~\\")
             p = File.profile().join(p.substr(2)).path;
         }
@@ -688,7 +690,7 @@ class File {
 
     isAbsolute () {
         var p = this.path;
-        return p ? re.absy.test(p) || Path.isAbsolute(p) : false;
+        return p ? re.abs.test(p) || Path.isAbsolute(p) : false;
     }
 
     isRelative () {

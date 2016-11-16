@@ -466,7 +466,7 @@ The most useful static methods are for conversion.
     var file = File.from(dir);
 
 Regardless if the value of `dir` above is a `String` or `File`, `file` is a `File`
-instance. if `dir` is `null` or `''` then `file` will be `null`.
+instance. If `dir` is `null` or `''` then `file` will be `null`.
 
 In reverse:
 
@@ -488,7 +488,8 @@ reference errors if used.
  - `resolve(fs...)` - Return `path.resolve()` on the `File` or `String` args as a `File`.
  - `resolvePath(fs...)` - Return `path.resolve()` on the `File` or `String` args as a `String`.
  - `split(fs)`- Returns a `String[]` from the `File` or `String`.
- - `sorter(fs1, fs2)` - Calls `File.from(fs1).compare(fs2)` (for `File[]` and `String[]`)
+ - `sorter(fs1, fs2)` - Calls `File.from(fs1).compare(fs2)` (useful for sorting
+  `File[]` and `String[]`).
 
 There are no asynchronous forms of these utility methods since they wouldn't really
 save much:
@@ -514,14 +515,10 @@ Instead just do this:
 The `profile()` method handles the various OS preferences for storing application
 data.
 
- - Windows:
-  `C:\Users\Name\AppData\Roaming\Company`
- - Mac OS X:
-  `/Users/Name/Library/Application Support/Company`
- - Linux:
-  `/home/name/.local/share/data/company`
- - Default:
-  `/home/name/.company`
+ - Windows: `C:\Users\Name\AppData\Roaming\Company`
+ - Mac OS X: `/Users/Name/Library/Application Support/Company`
+ - Linux: `/home/name/.local/share/data/company`
+ - Default: `/home/name/.company`
 
 The "Company" part can be passed as the argument to `profile()` but is better left to
 the top-level application to set `File.COMPANY`.
