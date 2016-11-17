@@ -2,25 +2,29 @@
 
 // TODO rm -rf
 // TODO sanitize
-// TODO temp (see tmp module)
-// TODO write
 
 const Fs = require('fs');
 const OS = require('os');
 const Path = require('path');
-const json5 = require('json5');
-const mkdirp = require('mkdirp');
-
-let fswin;  // cannot load here or (boom) on non-Windows
 
 const platform = OS.platform();
+
+const isWin = /^win\d\d$/i.test(platform);
+const isMac = /^darwin$/i.test(platform);
+
+// Do not require wrongly... fswin wrecks non-Windows platforms:
+const fswin = isWin ? require('fswin') : null;
+
+const json5 = require('json5');
+const mkdirp = require('mkdirp');
+const Tmp = require('tmp');
 
 const re = {
     abs: /^~{1,2}[\/\\]/,
     homey: /^~[\/\\]/,
     profile: /^~~[\/\\]/,
     slash: /\\/g,
-    split: /[\/]/g
+    split: isWin ? /[\/\\]/g : /[\/]/g
 };
 
 function detildify (p) {
@@ -174,6 +178,24 @@ class File {
     }
 
     /**
+     * Creates a temporary directory and returns a Promise to its path as a `File`.
+     * @param {Object} [options] Options for `dir()` from the `tmp` module.
+     * @return {Promise<File>}
+     */
+    static asyncTemp (options) {
+        return new Promise((resolve, reject) => {
+            Tmp.dir(options, (err, name) => {
+                if (err) {
+                    reject(err);
+                }
+                else {
+                    resolve(File.from(name));
+                }
+            });
+        });
+    }
+
+    /**
      * Returns the `process.cwd()` as a `File` instance.
      * @return {File} The `process.cwd()` as a `File` instance.
      */
@@ -207,6 +229,15 @@ class File {
         }
 
         return file;
+    }
+
+    /**
+     * Returns the path as a string given a `File` or string.
+     * @param {String/File} file
+     * @return {String} The path.
+     */
+    static fspath (file) {
+        return ((file && file.$isFile) ? file.fspath : file) || '';
     }
 
     /**
@@ -367,6 +398,17 @@ class File {
     static sorter (file1, file2) {
         var a = File.from(file1);
         return a.compare(file2);
+    }
+
+    /**
+     * Creates a temporary directory and returns its path as a `File`.
+     * @param {Object} [options] Options for `dirSync()` from the `tmp` module.
+     * @return {File}
+     */
+    static temp (options) {
+        var result = Tmp.dirSync(options);
+
+        return File.from(result.name);
     }
 
     //-----------------------------------------------------------------
@@ -1461,6 +1503,29 @@ class File {
     }
 
     /**
+     * Generates a temporary file name in this directory and returns a Promise to its
+     * path as a `File`.
+     * @param {Object} [options] Options for `tmpName()` from the `tmp` module.
+     * @return {Promise<File>}
+     */
+    asyncTemp (options) {
+        options = Object.assign({
+            dir: this.fspath
+        }, options);
+
+        return new Promise((resolve, reject) => {
+            Tmp.tmpName(options, (err, name) => {
+                if (err) {
+                    reject(err);
+                }
+                else {
+                    resolve(File.from(name));
+                }
+            });
+        });
+    }
+
+    /**
      * Returns a listing of items in this directory. The `mode` parameter can be used
      * to adjust what is reported.
      *
@@ -1597,17 +1662,26 @@ class File {
         })
     }
 
-    //-----------------------------------------------------------------
-    // File Loader
+    /**
+     * Generates a temporary file name in this directory and returns its path.
+     * @param {Object} [options] Options for `tmpNameSync()` from the `tmp` module.
+     * @return {File}
+     */
+    temp (options) {
+        options = Object.assign({
+            dir: this.fspath
+        }, options);
 
-    asyncLoad (options) {
-        let loader = this.getLoader(options);
+        var result = Tmp.tmpNameSync(options);
 
-        return loader.asyncLoad(this);
+        return File.from(result);
     }
 
-    getLoader (options) {
-        let loader, opts, type;
+    //-----------------------------------------------------------------
+    // File Loader / Writer
+
+    _getDriver (drivers, kind, options) {
+        let driver, opts, type;
 
         if (options) {
             if (typeof options === 'string') {
@@ -1624,28 +1698,48 @@ class File {
             }
 
             if (type) {
-                loader = File.loaders[type];
-                if (!loader) {
-                    throw new Error(`No such loader as "${type}"`);
+                driver = drivers[type];
+                if (!driver) {
+                    throw new Error(`No such ${kind} as "${type}"`);
                 }
             }
         }
 
-        if (!loader) {
-            loader = File.loaders[this.extent] || File.loaders.text; // eg extent="json"
+        if (!driver) {
+            driver = drivers[this.extent] || drivers.text; // eg extent="json"
         }
 
         if (opts) {
-            loader = loader.extend(opts);
+            driver = driver.extend(opts);
         }
 
-        return loader;
+        return driver;
+    }
+
+    _getLoader (options) {
+        return this._getDriver(File.loaders, 'loader', options);
+    }
+
+    _getWriter (options) {
+        return this._getDriver(File.writers, 'writer', options);
+    }
+
+    asyncLoad (options) {
+        let loader = this._getLoader(options);
+
+        return loader.asyncLoad(this);
+    }
+
+    asyncSave (data, options) {
+        let writer = this._getWriter(options);
+
+        return writer.asyncSave(this, data);
     }
 
     /**
      * For example:
      *
-     *      file.load();  // default loader
+     *      file.load();  // default loader based on file ext
      *
      *      file.load('binary');  // use binary loader
      *
@@ -1672,13 +1766,56 @@ class File {
      *          }
      *      });
      *
-     * @param {String/Object} [options]
+     * @param {File.Loader} [options] Loader options
      * @return {*}
      */
     load (options) {
-        let loader = this.getLoader(options);
+        let loader = this._getLoader(options);
 
         return loader.load(this);
+    }
+
+    /**
+     * Saves the given `data` to this file.
+     *
+     * For example:
+     *
+     *      file.save(data);  // default writer based on file ext
+     *
+     *      file.save(data, 'binary');  // use binary writer
+     *
+     *      file.save(data, 'text');  // use text writer
+     *
+     *      file.save(data, {
+     *          join: '\n'
+     *      });
+     *
+     *      file.save(data, {
+     *          type: 'text',
+     *          join: '\n'
+     *      });
+     *
+     *      file.save(data, {
+     *          type: 'text',
+     *          encoding: 'utf16'  // encoding can be on writer config
+     *      });
+     *
+     *      file.save({
+     *          type: 'text',
+     *          options: {  // raw fs options
+     *              mode: 0o777
+     *          }
+     *      });
+     *
+     * @param {String/Object} data The data to save
+     * @param {File.Writer} [options] Writer options
+     * @return {File} this
+     * @chainable
+     */
+    save (data, options) {
+        let writer = this._getWriter(options);
+
+        return writer.save(this, data);
     }
 
     //------------------------------------------------------------------------
@@ -1723,28 +1860,37 @@ class File {
 
     /**
      * Asynchronously descends the file-system starting with the current location, calling
-     * the provided `handler` for each file or folder.
+     * the provided `before` for each file or folder.
      *
      * @param {String} [mode] The directory `list` mode string to control the traversal.
-     * @param {Function} handler A function that will be called for each file/folder
-     * starting with this instance. This is the same `handler` provided to the `walk`
+     * @param {Function} before A function that will be called for each file/folder
+     * starting with this instance. This is the same `before` provided to the `walk`
      * method except that this function can return a Promise.
-     * @param {File} handler.file The file object referencing the current file or folder
+     * @param {File} before.file The file object referencing the current file or folder
      * to examine.
-     * @param {Object} handler.state The state object tracking the traversal.
-     * @param {File} handler.state.at The current `file` instance.
-     * @param {File} handler.state.previous The file instance passed to the `handler` on
+     * @param {Object} before.state The state object tracking the traversal.
+     * @param {File} before.state.at The current `file` instance.
+     * @param {File} before.state.previous The file instance passed to the `before` on
      * the previous call.
-     * @param {File[]} handler.state.stack The traversal stack of file objects from the
+     * @param {File[]} before.state.stack The traversal stack of file objects from the
      * starting instance to the current folder.
-     * @param {Boolean} handler.state.stop Set to `true` to abort the traversal.
-     * @param {Promise<Boolean>} handler.return Return `false` to not descend into a folder.
+     * @param {Boolean} before.state.stop Set to `true` to abort the traversal.
+     * @param {Promise<Boolean>} before.return Return `false` to not descend into a folder.
+     * Can be a Promise to this boolean result.
+     * @param {Function} after A function that will be called after each file/folder
+     * has been descended.
+     * @param {File} after.file The file object referencing the current file or folder
+     * to examine.
+     * @param {Object} after.state The state object tracking the traversal.
+     * @param {Promise<Boolean>} after.return Can return a Promise to process before
+     * continuiing.
      * @return {Promise<Object>} A promise that resolves to the `state` object after the
      * traversal is complete.
      */
-    asyncWalk (mode, handler) {
-        if (!handler) {
-            handler = mode;
+    asyncWalk (mode, before, after) {
+        if (typeof mode === 'function') {
+            after = before;
+            before = mode;
             mode = '';
         }
 
@@ -1762,7 +1908,7 @@ class File {
             state.at = f;
 
             try {
-                let result = Promise.resolve(handler(f, state));
+                let result = Promise.resolve(before ? before(f, state) : true);
 
                 return result.then(r => {
                     if (r === false || state.stop) {
@@ -1783,6 +1929,12 @@ class File {
                                         }
                                     });
                                 });
+
+                                if (after) {
+                                    sequence = sequence.then(() => {
+                                        return after(f, state);
+                                    });
+                                }
 
                                 return sequence.then(() => {
                                     state.stack.pop();
@@ -1847,27 +1999,33 @@ class File {
     /**
      * Synchronously processes the current file and (if it is a directory) all child
      * files or folders. Each `file` is passed along with a `state` object to the given
-     * `handler` for processing. The `handler` should return `false` to not recurse into
+     * `before` for processing. The `before` should return `false` to not recurse into
      * a directory.
      *
      * @param {String} [mode] The directory `list` mode string to control the traversal.
-     * @param {Function} handler A function that will be called for each file/folder
+     * @param {Function} before A function that will be called for each file/folder
      * starting with this instance.
-     * @param {File} handler.file The file object referencing the current file or folder
+     * @param {File} before.file The file object referencing the current file or folder
      * to examine.
-     * @param {Object} handler.state The state object tracking the traversal.
-     * @param {File} handler.state.at The current `file` instance.
-     * @param {File} handler.state.previous The file instance passed to the `handler` on
+     * @param {Object} before.state The state object tracking the traversal.
+     * @param {File} before.state.at The current `file` instance.
+     * @param {File} before.state.previous The file instance passed to the `before` on
      * the previous call.
-     * @param {File[]} handler.state.stack The traversal stack of file objects from the
+     * @param {File[]} before.state.stack The traversal stack of file objects from the
      * starting instance to the current folder.
-     * @param {Boolean} handler.state.stop Set to `true` to abort the traversal.
-     * @param {Boolean} handler.return Return `false` to not descend into a folder.
+     * @param {Boolean} before.state.stop Set to `true` to abort the traversal.
+     * @param {Boolean} before.return Return `false` to not descend into a folder.
+     * @param {Function} after A function that will be called after each file/folder
+     * has been descended.
+     * @param {File} after.file The file object referencing the current file or folder
+     * to examine.
+     * @param {Object} after.state The state object tracking the traversal.
      * @return {Object} The state object used for the traversal.
      */
-    walk (mode, handler) {
-        if (!handler) {
-            handler = mode;
+    walk (mode, before, after) {
+        if (typeof mode === 'function') {
+            after = before;
+            before = mode;
             mode = '';
         }
 
@@ -1884,10 +2042,12 @@ class File {
             state.previous = state.at;
             state.at = f;
 
-            let ret = handler(f, state);
+            if (before) {
+                let ret = before(f, state);
 
-            if (ret === false || state.stop) {
-                return;
+                if (ret === false || state.stop) {
+                    return;
+                }
             }
 
             if (f.isDir()) {
@@ -1896,6 +2056,10 @@ class File {
                 let children = f.list(options);
                 for (let i = 0; !state.stop && i < children.length; ++i) {
                     descend(children[i]);
+                }
+
+                if (after) {
+                    after(f, state);
                 }
 
                 state.stack.pop();
@@ -1923,9 +2087,29 @@ class File {
 
 } // class File
 
+const proto = File.prototype;
+
+Object.assign(proto, {
+    $isFile: true,
+    _re: re,
+    _stat: null,
+
+    _extent: undefined,
+    _name: undefined,
+    _parent: undefined
+});
+
+File.WIN = isWin;
+File.MAC = isMac;
+File.CASE = !isWin && !isMac;
+
+File.isDirectory = File.isDir;
+File.re = re;
+File.separator = Path.sep;
+
 //------------------------------------------------------------------------
 
-File.Loader = class {
+File.Configurable = class {
     constructor (config) {
         Object.assign(this, config);
 
@@ -1935,23 +2119,23 @@ File.Loader = class {
     }
 
     extend (config) {
-        var loader = Object.create(this);
+        var ret = Object.create(this);
 
         if (config) {
-            Object.assign(loader, config);
+            Object.assign(ret, config);
 
-            loader.options = this.getOptions(config.options || {});
+            ret.options = this.getOptions(config.options || {});
 
             if (!config.options) {
                 // If the user didn't supply specific fs options, see about encoding
                 if (config.encoding) {
                     // loader.options is always a safe copy we can adjust...
-                    loader.options.encoding = config.encoding;
+                    ret.options.encoding = config.encoding;
                 }
             }
         }
 
-        return loader;
+        return ret;
     }
 
     getOptions (options) {
@@ -1964,6 +2148,23 @@ File.Loader = class {
 
         return ret;
     }
+};
+
+/**
+ * @class File.Loader
+ */
+File.Loader = class extends File.Configurable {
+    /**
+     * @cfg {String} encoding
+     * The file encoding (e.g. 'utf8').
+     */
+
+    /**
+     * @cfg {Object} options
+     * An object that is passed to the `fs.readFile()` or `fs.readFileSync()` method.
+     * This is typically where `encoding` is placed but `encoding` can also be given
+     * as a direct loader config.
+     */
 
     asyncLoad (filename) {
         return this.asyncRead(filename).then(data => {
@@ -1973,7 +2174,7 @@ File.Loader = class {
 
     asyncRead (filename) {
         return new Promise((resolve, reject) => {
-            Fs.readFile(File.from(filename).fspath, this.options, (err, data) => {
+            Fs.readFile(File.fspath(filename), this.options, (err, data) => {
                 if (err) {
                     reject(err);
                 }
@@ -2001,7 +2202,7 @@ File.Loader = class {
     }
 
     read (filename) {
-        return Fs.readFileSync(File.from(filename).fspath, this.options);
+        return Fs.readFileSync(File.fspath(filename), this.options);
     }
 
     _parse (filename, data) {
@@ -2014,6 +2215,14 @@ File.Loader = class {
         }
     }
 };
+
+Object.assign(File.Loader.prototype, {
+    /**
+     * @cfg {String} split
+     * A string to use to split lines in the default `parse()` method.
+     */
+    split: null
+});
 
 File.loaders = {
     binary: new File.Loader(),
@@ -2038,30 +2247,135 @@ File.loaders.json = File.loaders.text.extend({
     }
 });
 
+//------------------------------------------------------------------------------
+
+/**
+ * @class File.Writer
+ */
+File.Writer = class extends File.Configurable {
+    /**
+     * @cfg {String} encoding
+     * The file encoding (e.g. 'utf8').
+     */
+
+    /**
+     * @cfg {Object} options
+     * An object that is passed to the `fs.writeFile()` or `fs.writeFileSync()` method.
+     * This is typically where `encoding` is placed but `encoding` can also be given
+     * as a direct loader config.
+     */
+
+    asyncSave (filename, data) {
+        let abs = File.from(filename).absolutify();
+
+        // wrap this.serialize in Promise.resolve() to allow it to be a value or
+        // a promise (maybe serialization needs to be async)...
+        Promise.resolve(this._serialize(data)).then(content => {
+            return abs.parent.asyncMkdir(this.dirmode).then(() => {
+                return this.asyncWrite(abs.path, content);
+            })
+        });
+    }
+
+    asyncWrite (filename, data) {
+        let path = File.fspath(filename);
+
+        return new Promise((resolve, reject) => {
+            Fs.writeFile(path, data, this.options, err => {
+                if (err) {
+                    reject(err);
+                }
+                else {
+                    resolve();
+                }
+            });
+        });
+    }
+
+    serialize (data) {
+        var join = this.join;
+
+        if (join != null && Array.isArray(data)) {
+            data = data.join(join);
+        }
+
+        return data;
+    }
+
+    _serialize (data) {
+        return this.serialize(data, this); // serialize() can be replaced
+    }
+
+    save (filename, data) {
+        var content = this._serialize(data);
+
+        this.write(filename, content);
+    }
+
+    write (filename, data) {
+        let abs = File.from(filename).absolutify();
+
+        abs.parent.mkdir(this.dirmode);
+
+        Fs.writeFileSync(abs.path, data, this.options);
+    }
+};
+
+Object.assign(File.Writer.prototype, {
+    /**
+     * @cfg {Number} dirmode
+     * The `mode` parameter to use for `mkdir()` when creating folders.
+     */
+    dirmode: undefined,
+
+    /**
+     * @cfg {String} join
+     * A string to use to join lines in the default `serialize()` method.
+     */
+    join: null
+});
+
+File.writers = {
+    binary: new File.Writer(),
+
+    text: new File.Writer({
+        options: {
+            encoding: 'utf8'
+        }
+    })
+};
+
+File.writers.bin = File.writers.binary;
+File.writers.txt = File.writers.text;
+
+File.writers.json = File.writers.text.extend({
+    /**
+     * @cfg {String} [indent='    ']
+     * The `space` parameter to pass to `JSON.stringify()`.
+     *
+     * Applies only to the `json` writer.
+     */
+    indent: '    ',
+
+    /**
+     * @cfg {Function} [replacer]
+     * The `replacer` parameter to pass to `JSON.stringify()`.
+     *
+     * Applies only to the `json` writer.
+     */
+    replacer: null,
+
+    serialize (data) {
+        return JSON.stringify(data, this.replacer, this.indent);
+    }
+});
+
 ['js','ts','coffee'].forEach(ext => {
     File.loaders[ext] = File.loaders.text.extend();
+    File.writers[ext] = File.writers.text.extend();
 });
 
-const proto = File.prototype;
-
-Object.assign(proto, {
-    $isFile: true,
-    _re: re,
-    _stat: null,
-
-    _extent: undefined,
-    _name: undefined,
-    _parent: undefined
-});
-
-File.WIN = /^win\d\d$/i.test(platform);
-File.MAC = /^darwin$/i.test(platform);
-
-File.CASE = !File.WIN && !File.MAC;
-
-File.isDirectory = File.isDir;
-File.re = re;
-File.separator = Path.sep;
+//------------------------------------------------------------------------------
 
 File.profilers = {
     default (home, company) {
@@ -2193,69 +2507,64 @@ proto.asyncIsSymLink = proto.asyncIsSymbolicLink;
 
 //------------------------------------------------------------
 
-class Win {
-    static asyncAttrib (path) {
-        return new Promise((resolve, reject) => {
-            var process = results => {
-                if (results) {
-                    resolve(Win.convertAttr(results));
-                }
-                else {
+if (isWin) {
+    class Win {
+        static asyncAttrib (path) {
+            return new Promise((resolve, reject) => {
+                var process = results => {
+                    if (results) {
+                        resolve(Win.convertAttr(results));
+                    }
+                    else {
+                        reject(new Error(`Cannot get attributes for ${path}`));
+                    }
+                };
+
+                if (!fswin.getAttributes(path, process)) {
                     reject(new Error(`Cannot get attributes for ${path}`));
                 }
-            };
-
-            if (!fswin.getAttributes(path, process)) {
-                reject(new Error(`Cannot get attributes for ${path}`));
-            }
-        })
-    }
-
-    static attrib (path) {
-        var attr = fswin.getAttributesSync(path);
-        return Win.convertAttr(attr);
-    }
-
-    static convertAttr (attr) {
-        var ret = '';
-
-        for (let i = 0, n = Win.attributes.length; i < n; ++i) {
-            let a = Win.attributes[i];
-            if (attr[a[0]]) {
-                ret += a[1];
-            }
+            })
         }
 
-        return ret;
+        static attrib (path) {
+            var attr = fswin.getAttributesSync(path);
+            return Win.convertAttr(attr);
+        }
+
+        static convertAttr (attr) {
+            var ret = '';
+
+            for (let i = 0, n = Win.attributes.length; i < n; ++i) {
+                let a = Win.attributes[i];
+                if (attr[a[0]]) {
+                    ret += a[1];
+                }
+            }
+
+            return ret;
+        }
     }
-}
 
-Win.attributes = [
-    //IS_DEVICE
-    //IS_NOT_CONTENT_INDEXED
-    //IS_SPARSE_FILE
-    //IS_TEMPORARY
-    //IS_INTEGRITY_STREAM
-    //IS_NO_SCRUB_DATA
-    //IS_REPARSE_POINT
-
-    [ 'IS_ARCHIVED',    'A' ],
-    [ 'IS_COMPRESSED',  'C' ],
-    [ 'IS_DIRECTORY',   'D' ],
-    [ 'IS_ENCRYPTED',   'E' ],
-    [ 'IS_HIDDEN',      'H' ],
-    [ 'IS_OFFLINE',     'O' ],
-    [ 'IS_READ_ONLY',   'R' ],
-    [ 'IS_SYSTEM',      'S' ]
-];
-
-if (File.WIN) {
-    // Cannot require at file-scope since it wrecks non-Windows platforms:
-    fswin = require('fswin');
-    
     File.Win = Win;
 
-    re.split = /[\/\\]/g;
+    Win.attributes = [
+        //IS_DEVICE
+        //IS_NOT_CONTENT_INDEXED
+        //IS_SPARSE_FILE
+        //IS_TEMPORARY
+        //IS_INTEGRITY_STREAM
+        //IS_NO_SCRUB_DATA
+        //IS_REPARSE_POINT
+
+        [ 'IS_ARCHIVED',    'A' ],
+        [ 'IS_COMPRESSED',  'C' ],
+        [ 'IS_DIRECTORY',   'D' ],
+        [ 'IS_ENCRYPTED',   'E' ],
+        [ 'IS_HIDDEN',      'H' ],
+        [ 'IS_OFFLINE',     'O' ],
+        [ 'IS_READ_ONLY',   'R' ],
+        [ 'IS_SYSTEM',      'S' ]
+    ];
 }
 
 //------------------------------------------------------------

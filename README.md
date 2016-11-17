@@ -301,8 +301,8 @@ To climb the file-system and find a relatively locatable item:
 
  - `upTo(rel)` - Starting at this, climb until `has(rel)` is `true` and then return
   `join(rel)` from that location.
- - `upDir(rel)` - Same as `upTo()` but using `hasDir(rel)` as the `test`.
- - `upFile(rel)` - Same as `upTo()` but using `hasFile(rel)` as the `test`.
+ - `upToDir(rel)` - Same as `upTo()` but using `hasDir(rel)` as the `test`.
+ - `upToFile(rel)` - Same as `upTo()` but using `hasFile(rel)` as the `test`.
 
 The different between these forms can be seen best by example:
 
@@ -322,14 +322,14 @@ Asynchronous forms (TODO - not implemented yet):
  - `asyncUpDir(rel)` - TODO
  - `asyncUpFile(rel)` - TODO
  - `asyncUpTo(rel)` - TODO
- - `asyncUpDir(rel)` - TODO
- - `asyncUpFile(rel)` - TODO
+ - `asyncUpToDir(rel)` - TODO
+ - `asyncUpToFile(rel)` - TODO
 
 ### Descent
 
  - `tips(mode, test)` - Returns a `File[]` of the top-most items passing the `test`.
   Once a match is found, no descent into that folder is made (hence, the "tips" of
-  the sub-tree).
+  the sub-tree). Uses `walk(mode)` to descend the file-system.
  - `walk(mode, handler)` - Calls `handler` for all items that `list(mode)` generates
   recursively.
 
