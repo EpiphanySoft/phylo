@@ -3,42 +3,56 @@
 const File = require('./File');
 File.COMPANY = 'Foobar';
 
-var f;
+var f = File.temp();
 
 console.log(`home: ${File.home()}`);
 console.log(`profile: ${File.profile('Acme')}`);
+console.log(`temp: ${f}`);
+console.log(`tempFile: ${f.temp().absolutePath()}`);
 
-f = File.cwd().upTo('package.json').load();
-console.log(`package ${f.name}`);
+let pkg = File.cwd().upTo('package.json').load();
+console.log(`package ${pkg.name}`);
 
-f = new File('~/.sencha');
-
-console.log(`f: ${f}`);
-console.log(`f.abssolute: ${f.absolutePath()}`);
-console.log(`f.canonical: ${f.canonicalPath()}`);
-console.log(`f.native: ${f.nativePath()}`);
-console.log(`f.normalized: ${f.normalizedPath()}`);
-console.log(`f.slashified: ${f.slashifiedPath()}`);
-console.log(`f.join: ${f.join('foo')}`);
-console.log(`f.parent: ${f.parent}`);
-console.log(`f.parent.join: ${f.parent.join('foo')}`);
-console.log(`f.parent.parent: ${f.parent.parent}`);
-
-f.list('A').forEach(ff => {
-    console.log(`ff: ${ff} ==> ${ff.name}`);
+f.asyncTemp().then(ff => {
+    console.log(`ff: ${ff}`);
 });
 
-f = new File('~~/.sencha');
-console.log(`f: ${f}`);
-console.log(`f.abssolute: ${f.absolutePath()}`);
-//console.log(`f.canonical: ${f.canonicalPath()}`);
-console.log(`f.native: ${f.nativePath()}`);
-console.log(`f.normalized: ${f.normalizedPath()}`);
-console.log(`f.slashified: ${f.slashifiedPath()}`);
-console.log(`f.join: ${f.join('foo')}`);
-console.log(`f.parent: ${f.parent}`);
-console.log(`f.parent.join: ${f.parent.join('foo')}`);
-console.log(`f.parent.parent: ${f.parent.parent}`);
+// f.join('foo.json').save(pkg, {
+//     indent: '\t'
+// });
+//
+// f.list().forEach(ff => {
+//     console.log(`ff: ${ff.path}`);
+// });
+
+// f = new File('~/.sencha');
+//
+// console.log(`f: ${f}`);
+// console.log(`f.abssolute: ${f.absolutePath()}`);
+// console.log(`f.canonical: ${f.canonicalPath()}`);
+// console.log(`f.native: ${f.nativePath()}`);
+// console.log(`f.normalized: ${f.normalizedPath()}`);
+// console.log(`f.slashified: ${f.slashifiedPath()}`);
+// console.log(`f.join: ${f.join('foo')}`);
+// console.log(`f.parent: ${f.parent}`);
+// console.log(`f.parent.join: ${f.parent.join('foo')}`);
+// console.log(`f.parent.parent: ${f.parent.parent}`);
+//
+// f.list('A').forEach(ff => {
+//     console.log(`ff: ${ff} ==> ${ff.name}`);
+// });
+
+// f = new File('~~/.sencha');
+// console.log(`f: ${f}`);
+// console.log(`f.abssolute: ${f.absolutePath()}`);
+// //console.log(`f.canonical: ${f.canonicalPath()}`);
+// console.log(`f.native: ${f.nativePath()}`);
+// console.log(`f.normalized: ${f.normalizedPath()}`);
+// console.log(`f.slashified: ${f.slashifiedPath()}`);
+// console.log(`f.join: ${f.join('foo')}`);
+// console.log(`f.parent: ${f.parent}`);
+// console.log(`f.parent.join: ${f.parent.join('foo')}`);
+// console.log(`f.parent.parent: ${f.parent.parent}`);
 
 //console.log(`load: ${f.join('don.license').load()}`);
 
@@ -60,11 +74,15 @@ console.log(`f.parent.parent: ${f.parent.parent}`);
 //     files.forEach(f => console.log('dir: ', f.path));
 // });
 
-// f.asyncWalk('Ad', (item, state) => {
-//     console.log(`${' '.repeat(state.stack.length * 4)}${item.name} - ${item._stat ? item._stat.attribs : ''}`);
-// }).then(() => {
-//     console.log('done');
-// });
+f = File.cwd();
+f.asyncWalk('', (item, state) => {
+    let c = item.isDirectory() ? '>' : ' ';
+    console.log(`${c} ${' '.repeat(state.stack.length * 4)}${item.name} - ${item._stat ? item._stat.attribs : ''}`);
+}, (item, state) => {
+    console.log(`< ${' '.repeat(state.stack.length * 4)}${item.name} - ${item._stat ? item._stat.attribs : ''}`);
+}).then(() => {
+    console.log('done');
+});
 
 // let pkg = f.upToFile('package.json');
 // console.log(`package ${pkg}`);
