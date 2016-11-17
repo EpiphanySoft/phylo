@@ -74,11 +74,15 @@ f.asyncTemp().then(ff => {
 //     files.forEach(f => console.log('dir: ', f.path));
 // });
 
-// f.asyncWalk('Ad', (item, state) => {
-//     console.log(`${' '.repeat(state.stack.length * 4)}${item.name} - ${item._stat ? item._stat.attribs : ''}`);
-// }).then(() => {
-//     console.log('done');
-// });
+f = File.cwd();
+f.asyncWalk('', (item, state) => {
+    let c = item.isDirectory() ? '>' : ' ';
+    console.log(`${c} ${' '.repeat(state.stack.length * 4)}${item.name} - ${item._stat ? item._stat.attribs : ''}`);
+}, (item, state) => {
+    console.log(`< ${' '.repeat(state.stack.length * 4)}${item.name} - ${item._stat ? item._stat.attribs : ''}`);
+}).then(() => {
+    console.log('done');
+});
 
 // let pkg = f.upToFile('package.json');
 // console.log(`package ${pkg}`);

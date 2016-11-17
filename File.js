@@ -2507,65 +2507,63 @@ proto.asyncIsSymLink = proto.asyncIsSymbolicLink;
 
 //------------------------------------------------------------
 
-if (isWin) {
-    class Win {
-        static asyncAttrib (path) {
-            return new Promise((resolve, reject) => {
-                var process = results => {
-                    if (results) {
-                        resolve(Win.convertAttr(results));
-                    }
-                    else {
-                        reject(new Error(`Cannot get attributes for ${path}`));
-                    }
-                };
-
-                if (!fswin.getAttributes(path, process)) {
+class Win {
+    static asyncAttrib (path) {
+        return new Promise((resolve, reject) => {
+            var process = results => {
+                if (results) {
+                    resolve(Win.convertAttr(results));
+                }
+                else {
                     reject(new Error(`Cannot get attributes for ${path}`));
                 }
-            })
-        }
+            };
 
-        static attrib (path) {
-            var attr = fswin.getAttributesSync(path);
-            return Win.convertAttr(attr);
-        }
-
-        static convertAttr (attr) {
-            var ret = '';
-
-            for (let i = 0, n = Win.attributes.length; i < n; ++i) {
-                let a = Win.attributes[i];
-                if (attr[a[0]]) {
-                    ret += a[1];
-                }
+            if (!fswin.getAttributes(path, process)) {
+                reject(new Error(`Cannot get attributes for ${path}`));
             }
-
-            return ret;
-        }
+        })
     }
 
-    File.Win = Win;
+    static attrib (path) {
+        var attr = fswin.getAttributesSync(path);
+        return Win.convertAttr(attr);
+    }
 
-    Win.attributes = [
-        //IS_DEVICE
-        //IS_NOT_CONTENT_INDEXED
-        //IS_SPARSE_FILE
-        //IS_TEMPORARY
-        //IS_INTEGRITY_STREAM
-        //IS_NO_SCRUB_DATA
-        //IS_REPARSE_POINT
+    static convertAttr (attr) {
+        var ret = '';
 
-        [ 'IS_ARCHIVED',    'A' ],
-        [ 'IS_COMPRESSED',  'C' ],
-        [ 'IS_DIRECTORY',   'D' ],
-        [ 'IS_ENCRYPTED',   'E' ],
-        [ 'IS_HIDDEN',      'H' ],
-        [ 'IS_OFFLINE',     'O' ],
-        [ 'IS_READ_ONLY',   'R' ],
-        [ 'IS_SYSTEM',      'S' ]
-    ];
+        for (let i = 0, n = Win.attributes.length; i < n; ++i) {
+            let a = Win.attributes[i];
+            if (attr[a[0]]) {
+                ret += a[1];
+            }
+        }
+
+        return ret;
+    }
 }
+
+Win.attributes = [
+    //IS_DEVICE
+    //IS_NOT_CONTENT_INDEXED
+    //IS_SPARSE_FILE
+    //IS_TEMPORARY
+    //IS_INTEGRITY_STREAM
+    //IS_NO_SCRUB_DATA
+    //IS_REPARSE_POINT
+
+    [ 'IS_ARCHIVED',    'A' ],
+    [ 'IS_COMPRESSED',  'C' ],
+    [ 'IS_DIRECTORY',   'D' ],
+    [ 'IS_ENCRYPTED',   'E' ],
+    [ 'IS_HIDDEN',      'H' ],
+    [ 'IS_OFFLINE',     'O' ],
+    [ 'IS_READ_ONLY',   'R' ],
+    [ 'IS_SYSTEM',      'S' ]
+];
+
+File.Win = isWin && Win;
 
 //------------------------------------------------------------
 
