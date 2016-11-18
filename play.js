@@ -27,6 +27,13 @@ f.asyncTemp().then(ff => {
     console.log(`ff: ${ff}`);
 });
 
+try {
+    File.from('C:\\Windows\\foobar.txt').save(pkg);
+}
+catch (e) {
+    console.log(`error: ${e.code} - ${e.message}`);
+}
+
 // f.join('foo.json').save(pkg, {
 //     indent: '\t'
 // });

@@ -1289,7 +1289,6 @@ class File {
                                     resolve(st);
                                 },
                                 e => {
-                                    st.attribs = '';
                                     resolve(st);
                                 });
                         }
@@ -1341,7 +1340,6 @@ class File {
                                     resolve(st);
                                 },
                                 e => {
-                                    st.attribs = '';
                                     resolve(st);
                                 });
                         }
@@ -2497,35 +2495,27 @@ Object.freeze(ACCESS);
 
 //--------------------
 
-function addTypeTest (name, statMethod, statMethodAsync) {
-    const prop = '_' + name;
+const linky = {
+    asyncStat: 'asyncStatLink',
+    stat: 'statLink'
+};
 
-    statMethod = statMethod || 'stat';
-    statMethodAsync = statMethodAsync || 'asyncStat';
-    proto[prop] = null;
+const normal = {
+    asyncStat: 'asyncStat',
+    stat: 'stat'
+};
 
+function addTypeTest (name, normal, link) {
     proto['async' + name[0].toUpperCase() + name.substr(1)] = function () {
-        let value = this[prop];
-
-        if (value !== null) {
-            return Promise.resolve(value);
-        }
-
-        return this[statMethodAsync](true).then(stat => {
-            return this[prop] = (stat ? stat[name]() : false);
+        return this[statMethodAsync]().then(stat => {
+            return (stat ? stat[name]() : false);
         });
     };
 
     return proto[name] = function () {
-        let value = this[prop];
+        let stat = this[statMethod]();
 
-        if (value === null) {
-            let stat = this[statMethod](true);
-
-            this[prop] = value = (stat ? stat[name]() : false);
-        }
-
-        return value;
+        return (stat ? stat[name]() : false);
     };
 }
 
