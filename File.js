@@ -970,24 +970,22 @@ class File {
      * @return {fs.Stats} The stats or `null` if the file does not exist.
      */
     stat () {
-        let ret = this._stat;
+        let st = this._stat;
 
-        if (!ret) {
+        if (!st) {
             let path = this.fspath;
 
             try {
-                this._stat = ret = Fs.statSync(path);
+                this._stat = st = Fs.statSync(path);
 
-                if (File.Win) {
-                    ret.attribs = Win.attrib(path);
-                }
+                st.attribs = File.Win ? Win.attrib(path) : '';
             }
             catch (e) {
                 // ignore
             }
         }
 
-        return ret;
+        return st;
     }
 
     /**
@@ -1001,24 +999,22 @@ class File {
      * @return {fs.Stats} The stats or `null` if the file does not exist.
      */
     statLink () {
-        let ret = this._lstat;
+        let st = this._lstat;
 
-        if (!ret) {
+        if (!st) {
             let path = this.fspath;
 
             try {
-                this._lstat = ret = Fs.lstatSync(path);
+                this._lstat = st = Fs.lstatSync(path);
 
-                if (File.Win) {
-                    ret.attribs = Win.attrib(path);
-                }
+                st.attribs = File.Win ? Win.attrib(path) : '';
             }
             catch (e) {
                 // ignore
             }
         }
 
-        return ret;
+        return st;
     }
 
     /**
@@ -1279,25 +1275,26 @@ class File {
 
         return this._async('_asyncStat', () => {
             return new Promise(resolve => {
-                Fs.stat(path, (err, stats) => {
+                Fs.stat(path, (err, st) => {
                     if (err) {
                         resolve(null);
                     }
                     else {
-                        this._stat = stats;
+                        st.attribs = '';
+                        this._stat = st;
 
                         if (File.Win) {
                             Win.asyncAttrib(path).then(attr => {
-                                    stats.attribs = attr;
-                                    resolve(stats);
+                                    st.attribs = attr;
+                                    resolve(st);
                                 },
                                 e => {
-                                    stats.attribs = '';
-                                    resolve(stats);
+                                    st.attribs = '';
+                                    resolve(st);
                                 });
                         }
                         else {
-                            resolve(stats);
+                            resolve(st);
                         }
                     }
                 });
@@ -1330,25 +1327,26 @@ class File {
 
         return this._async('_asyncStatLink', () => {
             return new Promise(resolve => {
-                Fs.lstat(path, (err, stats) => {
+                Fs.lstat(path, (err, st) => {
                     if (err) {
                         resolve(null);
                     }
                     else {
-                        this._lstat = stats;
+                        st.attribs = '';
+                        this._lstat = st;
 
                         if (File.Win) {
                             Win.asyncAttrib(path).then(attr => {
-                                    stats.attribs = attr;
-                                    resolve(stats);
+                                    st.attribs = attr;
+                                    resolve(st);
                                 },
                                 e => {
-                                    stats.attribs = '';
-                                    resolve(stats);
+                                    st.attribs = '';
+                                    resolve(st);
                                 });
                         }
                         else {
-                            resolve(stats);
+                            resolve(st);
                         }
                     }
                 });
@@ -1482,6 +1480,7 @@ class File {
 
                 var promises = [];
 
+                //TODO split stat / lstat up
                 names.forEach(name => {
                     let f = new File(this, name);
                     f._parent = this;
@@ -1600,6 +1599,7 @@ class File {
             let f = new File(this, name);
             f._parent = this;
 
+            //TODO split stat / lstat up
             let st = options.l ? f.statLink() : (options.statify ? f.stat() : null);
 
             if (st) {
@@ -1686,7 +1686,7 @@ class File {
     }
 
     //-----------------------------------------------------------------
-    // File Loader / Writer
+    // File Reader / Writer
 
     _getDriver (drivers, kind, options) {
         let driver, opts, type;
@@ -1724,8 +1724,8 @@ class File {
         return driver;
     }
 
-    _getLoader (options) {
-        return this._getDriver(File.loaders, 'loader', options);
+    _getReader (options) {
+        return this._getDriver(File.readers, 'reader', options);
     }
 
     _getWriter (options) {
@@ -1733,9 +1733,9 @@ class File {
     }
 
     asyncLoad (options) {
-        let loader = this._getLoader(options);
+        let reader = this._getReader(options);
 
-        return loader.asyncLoad(this);
+        return reader.asyncLoad(this);
     }
 
     asyncSave (data, options) {
@@ -1747,11 +1747,11 @@ class File {
     /**
      * For example:
      *
-     *      file.load();  // default loader based on file ext
+     *      file.load();  // default reader based on file ext
      *
-     *      file.load('binary');  // use binary loader
+     *      file.load('binary');  // use binary reader
      *
-     *      file.load('text');  // use text loader
+     *      file.load('text');  // use text reader
      *
      *      file.load({
      *          split: /\n/g  // default type but w/split config
@@ -1764,7 +1764,7 @@ class File {
      *
      *      file.load({
      *          type: 'text',
-     *          encoding: 'utf16'  // encoding can be on loader config
+     *          encoding: 'utf16'  // encoding can be on reader config
      *      });
      *
      *      file.load({
@@ -1774,13 +1774,13 @@ class File {
      *          }
      *      });
      *
-     * @param {File.Loader} [options] Loader options
+     * @param {File.Reader} [options] Reader options
      * @return {*}
      */
     load (options) {
-        let loader = this._getLoader(options);
+        let reader = this._getReader(options);
 
-        return loader.load(this);
+        return reader.load(this);
     }
 
     /**
@@ -2153,7 +2153,7 @@ File.Driver = class {
             if (!config.options) {
                 // If the user didn't supply specific fs options, see about encoding
                 if (config.encoding) {
-                    // loader.options is always a safe copy we can adjust...
+                    // "options" is always a safe copy we can adjust...
                     ret.options.encoding = config.encoding;
                 }
             }
@@ -2175,9 +2175,9 @@ File.Driver = class {
 };
 
 /**
- * @class File.Loader
+ * @class File.Reader
  */
-File.Loader = class extends File.Driver {
+File.Reader = class extends File.Driver {
     /**
      * @cfg {String} encoding
      * The file encoding (e.g. 'utf8').
@@ -2187,7 +2187,7 @@ File.Loader = class extends File.Driver {
      * @cfg {Object} options
      * An object that is passed to the `fs.readFile()` or `fs.readFileSync()` method.
      * This is typically where `encoding` is placed but `encoding` can also be given
-     * as a direct loader config.
+     * as a direct reader config.
      */
 
     asyncLoad (filename) {
@@ -2240,7 +2240,7 @@ File.Loader = class extends File.Driver {
     }
 };
 
-Object.assign(File.Loader.prototype, {
+Object.assign(File.Reader.prototype, {
     /**
      * @cfg {String} split
      * A string to use to split lines in the default `parse()` method.
@@ -2248,20 +2248,20 @@ Object.assign(File.Loader.prototype, {
     split: null
 });
 
-File.loaders = {
-    binary: new File.Loader(),
+File.readers = {
+    binary: new File.Reader(),
 
-    text: new File.Loader({
+    text: new File.Reader({
         options: {
             encoding: 'utf8'
         }
     })
 };
 
-File.loaders.bin = File.loaders.binary;
-File.loaders.txt = File.loaders.text;
+File.readers.bin = File.readers.binary;
+File.readers.txt = File.readers.text;
 
-File.loaders.json = File.loaders.text.extend({
+File.readers.json = File.readers.text.extend({
     parse (data) {
         // Handles comments, single-quoted strings, unquoted object keys etc.. In
         // general, JSON5 is a very relaxed form of JSON that accepts all valid JSON
@@ -2271,7 +2271,7 @@ File.loaders.json = File.loaders.text.extend({
     }
 });
 
-File.loaders['json:strict'] = File.loaders.text.extend({
+File.readers['json:strict'] = File.readers.text.extend({
     parse (data) {
         return JSON.parse(data);
     }
@@ -2292,7 +2292,7 @@ File.Writer = class extends File.Driver {
      * @cfg {Object} options
      * An object that is passed to the `fs.writeFile()` or `fs.writeFileSync()` method.
      * This is typically where `encoding` is placed but `encoding` can also be given
-     * as a direct loader config.
+     * as a direct writer config.
      */
 
     asyncSave (filename, data) {
@@ -2407,7 +2407,7 @@ File.writers.json5 = File.writers.json.extend({
 });
 
 ['js','ts','coffee'].forEach(ext => {
-    File.loaders[ext] = File.loaders.text.extend();
+    File.readers[ext] = File.readers.text.extend();
     File.writers[ext] = File.writers.text.extend();
 });
 

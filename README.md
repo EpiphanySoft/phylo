@@ -142,7 +142,9 @@ To get information about the file on disk:
  - `has(rel)` - Returns `true` if a file or folder exists at the `rel` path from this file.
  - `hasDir(rel)` - Returns `true` if a folder exists at the `rel` path from this file.
  - `hasFile(rel)` - Returns `true` if a file exists at the `rel` path from this file.
- - `isHidden()` - Returns `true` if this file does not exist or is hidden.
+ - `isHidden()` - Returns `true` if this file does not exist or is hidden. Note that on
+  Windows, hidden state is not based on a file name convention (".hidden") but is a bit
+  stored in the file-system (see below).
  - `stat()` / `restat()` - Returns `fs.statSync(this.path)` (an `fs.Stats`).
  - `statLink()` / `restatLink()` - Returns `fs.lstatSync(this.path)` (an `fs.Stats`).
 
@@ -157,6 +159,28 @@ In asynchronous form:
  - `asyncIsHidden()` - Promises `true` or `false`
  - `asyncStat()` / `asyncRestat()` - Promises an `fs.Stats` via `fs.stat()`
  - `asyncStatLink()` / `asyncRestatLink()` - Promises an `fs.Stats` via `fs.lstat()`
+
+### File Status
+
+The `[fs.Stat](https://nodejs.org/api/fs.html#fs_class_fs_stats)` structure is augmented
+on Windows with an `attribs` property. This is a string with any of the following
+characters:
+
+ - `A` - Archive
+ - `C` - Compressed
+ - `D` - Directory
+ - `E` - Encrypted
+ - `H` - Hidden
+ - `O` - Offline
+ - `R` - Readonly
+ - `S` - System
+
+The `[fswin](https://www.npmjs.com/package/fswin)` module is used to retrieve this
+information.
+
+A `fs.Stat` object is cached on the `File` instance by the `stat()` family of methods and
+a separate instance is cached on by the `statLink()` family. These are lazily retrieved
+and then stored for future use. To get fresh copies, use the `restat()` family of methods.
 
 ### FileAccess
 
@@ -335,7 +359,7 @@ Asynchronous forms (TODO - not implemented yet):
   lastly calls `after`. Both `before` and `after` are optional but one
   should be provided.
 
-The `walk` method's `handler` looks like this:
+The `walk` method's `before` and `after` handlers looks like this:
 
     function handler (file, state) {
         if (file.isDir() && ...) {
@@ -365,16 +389,16 @@ The `tips` method's `test` looks like this:
         return false; // keep going and/or descending
     }
 
-The `state` parameter is the same as for the `handler` on the `walk` method.
+The `state` parameter is the same as for the `walk` method.
  
 Asynchronous forms:
 
  - `asyncTips(mode, test)`
  - `asyncWalk(mode, before, after)`
 
-The `test`, `before` and `after` methods of the asynchronous methods
-accept the same parameters and can return the same results as with the
-synchronous forms. They can alternatively return a Promise if their
+The `test`, `before` and `after` handlers of the asynchronous methods
+accept the same parameters and return the same results as with the
+synchronous forms. They can, alternatively, return a Promise if their
 determination is also async.
 
 ## Reading and Writing Files
@@ -382,10 +406,13 @@ determination is also async.
 Basic file reading and decoding/parsing are provided by these methods:
 
  - `asyncLoad(options)` - Same as `load()` except a Promise is returned.
- - `asyncSave(data, options)` - Same as `save()` except a Promise is
-  returned.
  - `load(options)` - Reads, decodes and parses the file according to 
   the provided `options`.
+
+And serializing, encoding and writing is provided by:
+
+ - `asyncSave(data, options)` - Same as `save()` except a Promise is
+  returned.
  - `save(data, options)` - Serializes and encodes the data and writes
   it to this file using the specified `options`.
 
@@ -395,17 +422,15 @@ the `fs` API, especially if the file name holds the clues you need.
 
 Compare:
 
-    var pkg = path.join(dir, 'package.json'); // a string
+    var pkg = path.join(dir, 'package.json');
 
-    var data = JSON.parse(fs.readfileSync(pkg, {
-        encoding: 'utf8'
-    }));
+    var data = JSON.parse(fs.readfileSync(pkg, 'utf8'));
 
 To loading using `File`:
 
-    var pkg = dir.join('package.json'); // a File
+    var pkg = dir.join('package.json');
 
-    var data = pkg.load();  // a parsed Object
+    var data = pkg.load();
 
 The basic advantage of the `File` approach is the error messages you get when
 things go wrong. Using the first snippet you would get errors like these (based
@@ -419,17 +444,25 @@ Using `load()` the message would be:
 
 With `File` there is hope in tracking down what has gone wrong.
 
-### Predefined Loaders
+When it is time to save the data, the process looks very symmetric:
 
-Loaders are objects that manage options for reading and parsing files. The following
-loaders come predefined:
+    pkg.save(data);
+
+Instead of the manual alternative:
+
+    fs.writeFileSync(pkg, JSON.stringify(data, null, '    '), 'utf8');
+
+### Predefined Readers
+
+Readers are objects that manage options for reading and parsing files. The following
+readers come predefined:
 
  - `bin` - An alias for `binary`.
  - `binary` - Reads a file as a buffer.
- - `json` - Extends the `text` loader and provides a `parse` method to
-  deserialize JSON data. This uses the `json5` module to tolerate human
-  friendly JSON.
- - `json:strict` - Extends `text` loader and uses strict `JSON.parse()`.
+ - `json` - Extends the `text` reader and provides a `parse` method to
+  deserialize JSON data. This uses the `[json5](https://www.npmjs.com/package/json5)`
+  module to tolerate human friendly JSON.
+ - `json:strict` - Extends `text` reader and uses strict `JSON.parse()`.
  - `text` - Reads a file as `utf8` encoding.
  - `txt` - An alias for `text`.
 
@@ -447,9 +480,9 @@ following writers come predefined:
   join the data if the data is an array (of lines perhaps).
  - `txt` - An alias for `text`.
 
-### Loader Options
+### Reader Options
 
-The default loader is selected based on the file's type, but we can override this:
+The default reader is selected based on the file's type, but we can override this:
     
     var data = pkg.load('text'); // load as a simple text (not parsed)
     
@@ -460,15 +493,15 @@ Other options can be specified (e.g. to split by new-line):
         split: /\n/g
     });
 
-Loaders support the following configuration properties:
+Readers support the following configuration properties:
 
  - `parse` - A function called to parse the file content. The method accepts two
-  arguments: `data` and `loader`. The `data` parameter is the file's content and
-  the `loader` is the fully configured `loader` instance.
+  arguments: `data` and `reader`. The `data` parameter is the file's content and
+  the `reader` is the fully configured `reader` instance.
  - `split` - An optional `RegExp` or `String` for a call to `String.split()`. This
   is used by the default `parse` method.
 
-In addition to `loader` configuration, the `fs.readFile()` options can be supplied:
+In addition to `reader` configuration, the `fs.readFile()` options can be supplied:
 
     var content = file.load({
         // The options object is passed directly to fs.readFile()
@@ -477,7 +510,7 @@ In addition to `loader` configuration, the `fs.readFile()` options can be suppli
         }
     });
 
-The `encoding` can be specified in the `options` or directly to the `loader`:
+The `encoding` can be specified in the `options` or directly to the `reader`:
 
     var content = file.load({
         encoding: 'utf16'
@@ -558,6 +591,15 @@ string or the `path` property of the `File`). Similar to `from()`, the `path()` 
 returns `''` when passed `null`. That value is still "falsey" but won't throw null
 reference errors if used.
 
+There is also `fspath()` that resolves `"~"` path elements:
+
+    var s = File.fspath(file);
+
+If the argument is already a `String` it is simply returned (just like the `path()`
+method). If the string may contain `"~"` elements, the safe conversion would be:
+
+    var s = File.from(file).fspath;
+
 ### Utility Methods
 
  - `access(fs)` - Returns a `FileAccess` for the `File` or `String`.
@@ -596,8 +638,8 @@ Instead just do this:
 
 ### Temp
 
-The `temp()` and `asyncTemp()` static methods use the `tmp` module to
-generate a temporary folder in the appropriate location for the platform.
+The `temp()` and `asyncTemp()` static methods use the `[tmp](https://www.npmjs.com/package/tmp)`
+module to generate a temporary folder in the appropriate location for the platform.
 
 When these methods are called with no `options` argument, they lazily
 create (and cache for future requests) a single temporary folder.
