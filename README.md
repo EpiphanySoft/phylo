@@ -330,14 +330,16 @@ Asynchronous forms (TODO - not implemented yet):
  - `tips(mode, test)` - Returns a `File[]` of the top-most items passing the `test`.
   Once a match is found, no descent into that folder is made (hence, the "tips" of
   the sub-tree). Uses `walk(mode)` to descend the file-system.
- - `walk(mode, handler)` - Calls `handler` for all items that `list(mode)` generates
-  recursively.
+ - `walk(mode, before, after)` - Calls `before` for all items that
+  `list(mode)` generates recursively, then processes those items and
+  lastly calls `after`. Both `before` and `after` are optional but one
+  should be provided.
 
 The `walk` method's `handler` looks like this:
 
     function handler (file, state) {
         if (file.isDir() && ...) {
-            return false;  // do not recurse into this dir
+            return false;  // do not recurse into file (before only)
         }
         
         if (...) {
@@ -349,6 +351,7 @@ The `state` object has the following members:
 
  - `at` - The current `File` being processed.
  - `previous` - The `File` previously passed to the handler.
+ - `root` - The `File` used to start the descent.
  - `stack` - A `File[]` of instances starting with the `File` used to start things.
  - `stop` - A boolean property that can be set to `true` to abort the `walk`.
  
@@ -367,18 +370,24 @@ The `state` parameter is the same as for the `handler` on the `walk` method.
 Asynchronous forms:
 
  - `asyncTips(mode, test)`
- - `asyncWalk(mode, handler)`
+ - `asyncWalk(mode, before, after)`
 
-The `test` and `handler` methods of the asynchronous methods accept the same
-parameters and can return the same results as with the synchronous forms. They
-can alternatively return a Promise if their determination is also async.
+The `test`, `before` and `after` methods of the asynchronous methods
+accept the same parameters and can return the same results as with the
+synchronous forms. They can alternatively return a Promise if their
+determination is also async.
 
-## Reading / Loading Files
+## Reading and Writing Files
 
 Basic file reading and decoding/parsing are provided by these methods:
 
- - `load(options)` - Reads, decodes and parses the file according to `options`.
- - `asyncLoad(options)` - Same as `load()` except a Promise is returned
+ - `asyncLoad(options)` - Same as `load()` except a Promise is returned.
+ - `asyncSave(data, options)` - Same as `save()` except a Promise is
+  returned.
+ - `load(options)` - Reads, decodes and parses the file according to 
+  the provided `options`.
+ - `save(data, options)` - Serializes and encodes the data and writes
+  it to this file using the specified `options`.
 
 The act of loading a file consists initially of reading the data (obviously). To
 get this part right, you need an `encoding` option which is tedious to setup in
@@ -410,9 +419,37 @@ Using `load()` the message would be:
 
 With `File` there is hope in tracking down what has gone wrong.
 
+### Predefined Loaders
+
+Loaders are objects that manage options for reading and parsing files. The following
+loaders come predefined:
+
+ - `bin` - An alias for `binary`.
+ - `binary` - Reads a file as a buffer.
+ - `json` - Extends the `text` loader and provides a `parse` method to
+  deserialize JSON data. This uses the `json5` module to tolerate human
+  friendly JSON.
+ - `json:strict` - Extends `text` loader and uses strict `JSON.parse()`.
+ - `text` - Reads a file as `utf8` encoding.
+ - `txt` - An alias for `text`.
+
+### Predefined Writers
+
+Writers are objects that manage options for serializing and writing files. The
+following writers come predefined:
+
+ - `bin` - An alias for `binary`.
+ - `binary` - Writes a file from a buffer.
+ - `json` - Extends the `text` writer and provides a `serialize` method to
+  write JSON data.
+ - `json5` - Extends `json` writer and uses `json5.stringify()`.
+ - `text` - Writes a file as `utf8` encoding. Accepts a `join` string option to
+  join the data if the data is an array (of lines perhaps).
+ - `txt` - An alias for `text`.
+
 ### Loader Options
 
-The default loader is based on the file's type, but we can override this:
+The default loader is selected based on the file's type, but we can override this:
     
     var data = pkg.load('text'); // load as a simple text (not parsed)
     
@@ -422,11 +459,6 @@ Other options can be specified (e.g. to split by new-line):
         type: 'text',
         split: /\n/g
     });
-
-This simplicity is accomplished using a `File.Loader` instance or simply a `loader`.
-Loaders are identified by name such as `text`, `binary` or `json`. By default,
-the file's extension (`extent` property) is used to select the `loader`. This will
-default to `text` for files with unrecognized extensions.
 
 Loaders support the following configuration properties:
 
@@ -454,6 +486,55 @@ The `encoding` can be specified in the `options` or directly to the `loader`:
     // Or on the fs options:
     
     var content = file.load({
+        options: {
+            encoding: 'utf16'
+        }
+    });
+
+### Writer Options
+
+The default writer is selected based on the file's type, but we can override this:
+    
+    pkg.save(data, 'text');
+    
+Other options can be specified (e.g. to join lines in an array with new-lines):
+    
+    pkg.save(data, {
+        type: 'text',
+        join: '\n'
+    });
+
+Writers support the following configuration properties:
+
+ - `serialize` - A function called to convert the data and return what will be written
+  to disk. The method accepts two arguments: `data` and `writer`. The `data` parameter
+  is the raw file data and the `writer` is the fully configured `writer` instance.
+ - `join` - An optional `String` for a call to `Array.join()` when file data is
+  an array. This is used by the default `serialize` method.
+
+The `json` writer also supports these properties:
+
+ - `indent` maps to the `space` parameter for `JSON.stringify`.
+ - `replacer` map to the `replacer` parameter for `JSON.stringify`.
+
+In addition to `writer` configuration, the `fs.writeFile()` options can be supplied:
+
+    file.save(data, {
+        // The options object is passed directly to fs.writeFile()
+        options: {
+            ...
+        }
+    });
+
+The `encoding` can be specified in the `options` or directly to the `writer`:
+
+    file.save(data, {
+        encoding: 'utf16'
+    });
+
+    // Or on the fs options:
+    
+    file.save(data, {
         options: {
             encoding: 'utf16'
         }
@@ -511,6 +592,17 @@ Instead just do this:
  - `cwd()` - Wraps `process.cwd()` as a `File`.
  - `home()` - Wraps `os.homedir()` as a `File`.
  - `profile()` - Returns the platform-favored storage folder for app data.
+ - `temp()` - Temporary folder for this application.
+
+### Temp
+
+The `temp()` and `asyncTemp()` static methods use the `tmp` module to
+generate a temporary folder in the appropriate location for the platform.
+
+When these methods are called with no `options` argument, they lazily
+create (and cache for future requests) a single temporary folder.
+
+### Profile
 
 The `profile()` method handles the various OS preferences for storing application
 data.

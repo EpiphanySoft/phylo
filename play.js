@@ -7,8 +7,18 @@ var f = File.temp();
 
 console.log(`home: ${File.home()}`);
 console.log(`profile: ${File.profile('Acme')}`);
+
+File.asyncTemp().then(t => {
+    console.log(`asyncTemp: ${t}`);
+});
+
 console.log(`temp: ${f}`);
+console.log(`File.temp: ${File.temp()}`);
 console.log(`tempFile: ${f.temp().absolutePath()}`);
+
+File.asyncTemp().then(t => {
+    console.log(`asyncTemp: ${t}`);
+});
 
 let pkg = File.cwd().upTo('package.json').load();
 console.log(`package ${pkg.name}`);
@@ -74,15 +84,15 @@ f.asyncTemp().then(ff => {
 //     files.forEach(f => console.log('dir: ', f.path));
 // });
 
-f = File.cwd();
-f.asyncWalk('', (item, state) => {
-    let c = item.isDirectory() ? '>' : ' ';
-    console.log(`${c} ${' '.repeat(state.stack.length * 4)}${item.name} - ${item._stat ? item._stat.attribs : ''}`);
-}, (item, state) => {
-    console.log(`< ${' '.repeat(state.stack.length * 4)}${item.name} - ${item._stat ? item._stat.attribs : ''}`);
-}).then(() => {
-    console.log('done');
-});
+// f = File.cwd();
+// f.asyncWalk('', (item, state) => {
+//     let c = item.isDirectory() ? '>' : ' ';
+//     console.log(`${c} ${' '.repeat(state.stack.length * 4)}${item.name} - ${item._stat ? item._stat.attribs : ''}`);
+// }, (item, state) => {
+//     console.log(`< ${' '.repeat(state.stack.length * 4)}${item.name} - ${item._stat ? item._stat.attribs : ''}`);
+// }).then(() => {
+//     console.log('done');
+// });
 
 // let pkg = f.upToFile('package.json');
 // console.log(`package ${pkg}`);

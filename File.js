@@ -15,9 +15,9 @@ const isMac = /^darwin$/i.test(platform);
 // Do not require wrongly... fswin wrecks non-Windows platforms:
 const fswin = isWin ? require('fswin') : null;
 
-const json5 = require('json5');
+const json5  = require('json5');
 const mkdirp = require('mkdirp');
-const Tmp = require('tmp');
+const Tmp    = require('tmp');
 
 const re = {
     abs: /^~{1,2}[\/\\]/,
@@ -179,17 +179,50 @@ class File {
 
     /**
      * Creates a temporary directory and returns a Promise to its path as a `File`.
+     *
+     * When no arguments are passed the first result is cached (since one temp dir is
+     * often sufficient for a process).
+     *
+     *      var temp;
+     *      var temp2;
+     *      var temp3;
+     *
+     *      File.asyncTemp().then(t => temp = t);   // generates temp dir
+     *      File.asyncTemp().then(t => temp2 = t);  // same dir (temp2 === temp)
+     *
+     *      File.asyncTemp(null).then(t => temp3 = t);  // new call to tmp.dir()
+     *
+     * Because only the first call to `temp()` does any real work, it is generally safe
+     * to use `temp()` (instead of `asyncTemp()`) when no options are passed and the one
+     * temporary folder is sufficient.
+     *
      * @param {Object} [options] Options for `dir()` from the `tmp` module.
      * @return {Promise<File>}
      */
     static asyncTemp (options) {
+        var cached = File._temp;
+        var useCache = (options === undefined);
+
+        if (cached && useCache) {
+            return Promise.resolve(cached);
+        }
+
         return new Promise((resolve, reject) => {
             Tmp.dir(options, (err, name) => {
                 if (err) {
                     reject(err);
                 }
                 else {
-                    resolve(File.from(name));
+                    let f = File.from(name);
+
+                    if (useCache) {
+                        // If we are after the shared temp, make sure it wasn't
+                        // created during our async trip... If not, store this
+                        // as the cached temp.
+                        f = File._temp || (File._temp = f);
+                    }
+
+                    resolve(f);
                 }
             });
         });
@@ -402,13 +435,33 @@ class File {
 
     /**
      * Creates a temporary directory and returns its path as a `File`.
+     *
+     * When no arguments are passed the first result is cached (since one temp dir is
+     * often sufficient for a process).
+     *
+     *      var temp = File.temp();  // generates temp dir
+     *
+     *      var temp2 = File.temp();  // === temp
+     *
+     *      var temp3 = File.temp(null);  // new call to tmp.dirSync()
+     *
      * @param {Object} [options] Options for `dirSync()` from the `tmp` module.
      * @return {File}
      */
     static temp (options) {
-        var result = Tmp.dirSync(options);
+        var result = File._temp;
+        var useCache = (options === undefined);
 
-        return File.from(result.name);
+        if (!result || !useCache) {
+            result = Tmp.dirSync(options);
+            result = File.from(result.name);
+
+            if (useCache) {
+                File._temp = result;
+            }
+        }
+
+        return result;
     }
 
     //-----------------------------------------------------------------
@@ -880,20 +933,12 @@ class File {
      * Returns the `[fs.Stats](https://nodejs.org/api/fs.html#fs_class_fs_stats)` but
      * ensures a fresh copy of the stats are fetched from the file-system.
      *
-     * @param {Boolean} [cache] Pass `true` to retain a cached stat object after this
-     * call.
      * @return {fs.Stats}
      */
-    restat (cache) {
+    restat () {
         this._stat = null;
 
-        let ret = this.stat();
-
-        if (cache) {
-            this._stat = ret;
-        }
-
-        return ret;
+        return this.stat();
     }
 
     /**
@@ -901,20 +946,12 @@ class File {
      * (potentially) symbolic link but ensures a fresh copy of the stats are fetched
      * from the file-system.
      *
-     * @param {Boolean} [cache] Pass `true` to retain a cached stat object after this
-     * call.
      * @return {fs.Stats}
      */
-    restatLink (cache) {
-        this._stat = null;
+    restatLink () {
+        this._lstat = null;
 
-        let ret = this.statLink();
-
-        if (cache) {
-            this._stat = ret;
-        }
-
-        return ret;
+        return this.statLink();
     }
 
     /**
@@ -926,16 +963,9 @@ class File {
      *          // file exists...
      *      }
      *
-     * In cases where details of the failure are desired, pass `true` to enable `strict`
-     * processing:
-     *
-     *      var st = File.from(s).stat(true);
-     *
-     *      // will throw if file does not exist or is inaccessible, etc..
-     *
-     * Note that in some cases (e.g., a directory listing created the instance), a stat
-     * object may be cached on this instance. If so, that object will always be returned.
-     * Use `restat` to ensure a fresh stat from the file-system.
+     * The stat object is cached on this instance. Use `restat` to ensure a fresh stat
+     * from the file-system. This cached stat object is shared with `asyncStat()` and
+     * `asyncRestat()` methods. The `statLink()` family uses a separately cached object.
      *
      * @return {fs.Stats} The stats or `null` if the file does not exist.
      */
@@ -946,7 +976,7 @@ class File {
             let path = this.fspath;
 
             try {
-                ret = Fs.statSync(path);
+                this._stat = ret = Fs.statSync(path);
 
                 if (File.Win) {
                     ret.attribs = Win.attrib(path);
@@ -964,20 +994,20 @@ class File {
      * Return the `[fs.Stats](https://nodejs.org/api/fs.html#fs_class_fs_stats)` for a
      * (potentially) symbolic link.
      *
-     * Note that in some cases (e.g., a directory listing created the instance), a stat
-     * object may be cached on this instance. If so, that object will always be returned.
-     * Use `restatLink` to ensure a fresh stat from the file-system.
+     * The stat object is cached on this instance. Use `restatLink` to ensure a fresh stat
+     * from the file-system. This cached stat object is shared with `asyncStatLink()` and
+     * `asyncRestatLink()` methods. The `stat()` family uses a separately cached object.
      *
      * @return {fs.Stats} The stats or `null` if the file does not exist.
      */
     statLink () {
-        let ret = this._stat;
+        let ret = this._lstat;
 
         if (!ret) {
             let path = this.fspath;
 
             try {
-                ret = Fs.lstatSync(path);
+                this._lstat = ret = Fs.lstatSync(path);
 
                 if (File.Win) {
                     ret.attribs = Win.attrib(path);
@@ -1204,22 +1234,12 @@ class File {
      * Returns the `[fs.Stats](https://nodejs.org/api/fs.html#fs_class_fs_stats)` but
      * ensures a fresh copy of the stats are fetched from the file-system.
      *
-     * @param {Boolean} [cache] Pass `true` to retain a cached stat object after this
-     * call.
      * @return {Promise<fs.Stats>} The stats or `null` if the file does not exist.
      */
-    asyncRestat (cache) {
+    asyncRestat () {
         this._stat = null;
 
-        let ret = this.asyncStat();
-
-        if (cache) {
-            ret = ret.then(st => {
-                return this._stat = st;
-            });
-        }
-
-        return ret;
+        return this.asyncStat();
     }
 
     /**
@@ -1227,22 +1247,12 @@ class File {
      * (potentially) symbolic link but ensures a fresh copy of the stats are fetched
      * from the file-system.
      *
-     * @param {Boolean} [cache] Pass `true` to retain a cached stat object after this
-     * call.
      * @return {Promise<fs.Stats>} The stats or `null` if the file does not exist.
      */
-    asyncRestatLink (cache) {
-        this._stat = null;
+    asyncRestatLink () {
+        this._lstat = null;
 
-        let ret = this.asyncStatLink();
-
-        if (cache) {
-            ret = ret.then(st => {
-                return this._stat = st;
-            });
-        }
-
-        return ret;
+        return this.asyncStatLink();
     }
 
     /**
@@ -1254,19 +1264,9 @@ class File {
      *          }
      *      });
      *
-     * In cases where details of the failure are desired, pass `true` to enable `strict`
-     * processing:
-     *
-     *      File.from(s).asyncStat(true).then(st => {
-     *          // file exists...
-     *      },
-     *      err => {
-     *          // file does not exist or is inaccessible, etc..
-     *      });
-     *
-     * Note that in some cases (e.g., a directory listing created the instance), a stat
-     * object may be cached on this instance. If so, that object will always be returned.
-     * Use `asyncRestat` to ensure a fresh stat from the file-system.
+     * The stat object is cached on this instance. Use `asyncRestat` to ensure a fresh
+     * stat from the file-system. This cached stat object is shared with `stat()` and
+     * `restat()` methods. The `statLink` family uses a separately cached object.
      *
      * @return {Promise<fs.Stats>} The stats or `null` if the file does not exist.
      */
@@ -1283,18 +1283,22 @@ class File {
                     if (err) {
                         resolve(null);
                     }
-                    else if (File.Win) {
-                        Win.asyncAttrib(path).then(attr => {
-                            stats.attribs = attr;
-                            resolve(stats);
-                        },
-                        e => {
-                            stats.attribs = '';
-                            resolve(stats);
-                        });
-                    }
                     else {
-                        resolve(stats);
+                        this._stat = stats;
+
+                        if (File.Win) {
+                            Win.asyncAttrib(path).then(attr => {
+                                    stats.attribs = attr;
+                                    resolve(stats);
+                                },
+                                e => {
+                                    stats.attribs = '';
+                                    resolve(stats);
+                                });
+                        }
+                        else {
+                            resolve(stats);
+                        }
                     }
                 });
             });
@@ -1311,15 +1315,15 @@ class File {
      *          }
      *      });
      *
-     * Note that in some cases (e.g., a directory listing created the instance), a stat
-     * object may be cached on this instance. If so, that object will always be returned.
-     * Use `asyncRestatLink` to ensure a fresh stat from the file-system.
+     * The stat object is cached on this instance. Use `asyncRestatLink` to ensure a fresh
+     * stat from the file-system. This cached stat object is shared with `statLink()` and
+     * `restatLink()` methods. The `stat()` family uses a separately cached object.
      *
      * @return {Promise<fs.Stats>} The stats or `null` if the file does not exist.
      */
     asyncStatLink () {
-        if (this._stat) {
-            return Promise.resolve(this._stat);
+        if (this._lstat) {
+            return Promise.resolve(this._lstat);
         }
 
         let path = this.fspath;
@@ -1330,18 +1334,22 @@ class File {
                     if (err) {
                         resolve(null);
                     }
-                    else if (File.Win) {
-                        Win.asyncAttrib(path).then(attr => {
-                            stats.attribs = attr;
-                            resolve(stats);
-                        },
-                        e => {
-                            stats.attribs = '';
-                            resolve(stats);
-                        });
-                    }
                     else {
-                        resolve(stats);
+                        this._lstat = stats;
+
+                        if (File.Win) {
+                            Win.asyncAttrib(path).then(attr => {
+                                    stats.attribs = attr;
+                                    resolve(stats);
+                                },
+                                e => {
+                                    stats.attribs = '';
+                                    resolve(stats);
+                                });
+                        }
+                        else {
+                            resolve(stats);
+                        }
                     }
                 });
             });
@@ -1831,8 +1839,7 @@ class File {
      * function can return a Promise.
      * @param {File} test.file The file object referencing the current file or folder
      * to examine.
-     * @param {Object} test.state The current directory traversal state object. See
-     * `walk`.
+     * @param {File.Walker} test.state The current directory traversal state object.
      * @param {Boolean} test.return Return `true` for a match to include the `file` and
      * avoid descent into the directory.
      * @return {File[]} The files that passed the `test`.
@@ -1868,88 +1875,22 @@ class File {
      * method except that this function can return a Promise.
      * @param {File} before.file The file object referencing the current file or folder
      * to examine.
-     * @param {Object} before.state The state object tracking the traversal.
-     * @param {File} before.state.at The current `file` instance.
-     * @param {File} before.state.previous The file instance passed to the `before` on
-     * the previous call.
-     * @param {File[]} before.state.stack The traversal stack of file objects from the
-     * starting instance to the current folder.
-     * @param {Boolean} before.state.stop Set to `true` to abort the traversal.
+     * @param {File.Walker} before.state The state object tracking the traversal.
      * @param {Promise<Boolean>} before.return Return `false` to not descend into a folder.
      * Can be a Promise to this boolean result.
-     * @param {Function} after A function that will be called after each file/folder
-     * has been descended.
-     * @param {File} after.file The file object referencing the current file or folder
-     * to examine.
-     * @param {Object} after.state The state object tracking the traversal.
+     * @param {Function} after A function that will be called after a folder has been
+     * descended.
+     * @param {File} after.file The file object referencing the current folder to examine.
+     * @param {File.Walker} after.state The state object tracking the traversal.
      * @param {Promise<Boolean>} after.return Can return a Promise to process before
-     * continuiing.
+     * continuing.
      * @return {Promise<Object>} A promise that resolves to the `state` object after the
      * traversal is complete.
      */
     asyncWalk (mode, before, after) {
-        if (typeof mode === 'function') {
-            after = before;
-            before = mode;
-            mode = '';
-        }
+        let state = new File.Walker(this, mode, before, after);
 
-        // we need _stat to recurse on directories...
-        var options = File._parseListMode('s' + (mode || ''));
-        var state = {
-            at: null,
-            previous: null,
-            stack: [],
-            stop: false
-        };
-
-        function descend (f) {
-            state.previous = state.at;
-            state.at = f;
-
-            try {
-                let result = Promise.resolve(before ? before(f, state) : true);
-
-                return result.then(r => {
-                    if (r === false || state.stop) {
-                        return;
-                    }
-
-                    return f.asyncIsDir().then(isDir => {
-                        if (isDir) {
-                            return f.asyncList(options).then(children => {
-                                let sequence = Promise.resolve();
-
-                                state.stack.push(f);
-
-                                children.forEach(c => {
-                                    sequence = sequence.then(() => {
-                                        if (!state.stop) {
-                                            return descend(c);
-                                        }
-                                    });
-                                });
-
-                                if (after) {
-                                    sequence = sequence.then(() => {
-                                        return after(f, state);
-                                    });
-                                }
-
-                                return sequence.then(() => {
-                                    state.stack.pop();
-                                });
-                            });
-                        }
-                    });
-                });
-            }
-            catch (e) {
-                return Promise.reject(e);
-            }
-        }
-
-        return descend(this).then(r => state);
+        return state.asyncDescend(this).then(() => state);
     }
 
     /**
@@ -1971,8 +1912,7 @@ class File {
      * `has`.
      * @param {File} test.file The file object referencing the current file or folder
      * to examine.
-     * @param {Object} test.state The current directory traversal state object. See
-     * `walk`.
+     * @param {File.Walker} test.state The current directory traversal state object.
      * @param {Boolean} test.return Return `true` for a match to include the `file` and
      * avoid descent into the directory.
      * @return {File[]} The files that passed the `test`.
@@ -2007,66 +1947,19 @@ class File {
      * starting with this instance.
      * @param {File} before.file The file object referencing the current file or folder
      * to examine.
-     * @param {Object} before.state The state object tracking the traversal.
-     * @param {File} before.state.at The current `file` instance.
-     * @param {File} before.state.previous The file instance passed to the `before` on
-     * the previous call.
-     * @param {File[]} before.state.stack The traversal stack of file objects from the
-     * starting instance to the current folder.
-     * @param {Boolean} before.state.stop Set to `true` to abort the traversal.
+     * @param {File.Walker} before.state The state object tracking the traversal.
      * @param {Boolean} before.return Return `false` to not descend into a folder.
-     * @param {Function} after A function that will be called after each file/folder
-     * has been descended.
-     * @param {File} after.file The file object referencing the current file or folder
-     * to examine.
-     * @param {Object} after.state The state object tracking the traversal.
+     * @param {Function} after A function that will be called after each folder has been
+     * descended.
+     * @param {File} after.file The file object referencing the current folder to examine.
+     * @param {File.Walker} after.state The state object tracking the traversal.
      * @return {Object} The state object used for the traversal.
      */
     walk (mode, before, after) {
-        if (typeof mode === 'function') {
-            after = before;
-            before = mode;
-            mode = '';
-        }
+        let state = new File.Walker(this, mode, before, after);
 
-        // we need _stat to recurse on directories...
-        var options = File._parseListMode('s' + (mode || ''));
-        var state = {
-            at: null,
-            previous: null,
-            stack: [],
-            stop: false
-        };
+        state.descend(this);
 
-        function descend (f) {
-            state.previous = state.at;
-            state.at = f;
-
-            if (before) {
-                let ret = before(f, state);
-
-                if (ret === false || state.stop) {
-                    return;
-                }
-            }
-
-            if (f.isDir()) {
-                state.stack.push(f);
-
-                let children = f.list(options);
-                for (let i = 0; !state.stop && i < children.length; ++i) {
-                    descend(children[i]);
-                }
-
-                if (after) {
-                    after(f, state);
-                }
-
-                state.stack.pop();
-            }
-        }
-
-        descend(this);
         return state;
     }
 
@@ -2109,7 +2002,138 @@ File.separator = Path.sep;
 
 //------------------------------------------------------------------------
 
-File.Configurable = class {
+/**
+ * @class File.Walker
+ */
+class Walker {
+    constructor (root, mode, before, after) {
+        if (typeof mode === 'function') {
+            after = before;
+            before = mode;
+            mode = '';
+        }
+
+        this.before = before;
+        this.after = after;
+        this.listMode = File._parseListMode('s' + (mode || ''));
+
+        /**
+         * @property {File} at
+         * The current `File` instance.
+         * @readonly
+         */
+
+        /**
+         * @property {File} previous
+         * The previously processed `File` instance.
+         * @readonly
+         */
+
+        this.at = this.previous = null;
+
+        /**
+         * @property {File} root
+         * The `File` instance used to start the descent.
+         * @readonly
+         */
+        this.root = root;
+
+        /**
+         * @property {File[]} stack
+         * The traversal stack of `File` objects from the starting instance to the current
+         * folder.
+         * @readonly
+         */
+        this.stack = [];
+
+        /**
+         * @property {Boolean} stop
+         * Set this property to `true` to abort the traversal.
+         */
+        this.stop = false;
+    }
+
+    asyncDescend (at) {
+        this.previous = this.at;
+        this.at = at;
+
+        try {
+            let result = Promise.resolve(this.before ? this.before(at, this) : true);
+
+            return result.then(r => {
+                if (r === false || this.stop) {
+                    return;
+                }
+
+                return at.asyncIsDir().then(isDir => {
+                    if (isDir) {
+                        return at.asyncList(this.listMode).then(children => {
+                            let sequence = Promise.resolve();
+
+                            this.stack.push(at);
+
+                            children.forEach(c => {
+                                sequence = sequence.then(() => {
+                                    if (!this.stop) {
+                                        return this.asyncDescend(c);
+                                    }
+                                });
+                            });
+
+                            if (this.after) {
+                                sequence = sequence.then(() => {
+                                    return this.after(at, this);
+                                });
+                            }
+
+                            return sequence.then(() => {
+                                this.stack.pop();
+                            });
+                        });
+                    }
+                });
+            });
+        }
+        catch (e) {
+            return Promise.reject(e);
+        }
+    }
+
+    descend (at) {
+        this.previous = this.at;
+        this.at = at;
+
+        if (this.before) {
+            let ret = this.before(at, this);
+
+            if (ret === false || this.stop) {
+                return;
+            }
+        }
+
+        if (at.isDir()) {
+            this.stack.push(at);
+
+            let children = at.list(this.listMode);
+
+            for (let i = 0; !this.stop && i < children.length; ++i) {
+                this.descend(children[i]);
+            }
+
+            if (this.after) {
+                this.after(at, this);
+            }
+
+            this.stack.pop();
+        }
+    }
+}
+
+File.Walker = Walker;
+
+//------------------------------------------------------------------------
+
+File.Driver = class {
     constructor (config) {
         Object.assign(this, config);
 
@@ -2153,7 +2177,7 @@ File.Configurable = class {
 /**
  * @class File.Loader
  */
-File.Loader = class extends File.Configurable {
+File.Loader = class extends File.Driver {
     /**
      * @cfg {String} encoding
      * The file encoding (e.g. 'utf8').
@@ -2247,12 +2271,18 @@ File.loaders.json = File.loaders.text.extend({
     }
 });
 
+File.loaders['json:strict'] = File.loaders.text.extend({
+    parse (data) {
+        return JSON.parse(data);
+    }
+});
+
 //------------------------------------------------------------------------------
 
 /**
  * @class File.Writer
  */
-File.Writer = class extends File.Configurable {
+File.Writer = class extends File.Driver {
     /**
      * @cfg {String} encoding
      * The file encoding (e.g. 'utf8').
@@ -2367,6 +2397,12 @@ File.writers.json = File.writers.text.extend({
 
     serialize (data) {
         return JSON.stringify(data, this.replacer, this.indent);
+    }
+});
+
+File.writers.json5 = File.writers.json.extend({
+    serialize (data) {
+        return json5.stringify(data, this.replacer, this.indent);
     }
 });
 
