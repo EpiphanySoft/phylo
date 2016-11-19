@@ -45,7 +45,7 @@ catch (e) {
 // f = new File('~/.sencha');
 //
 // console.log(`f: ${f}`);
-// console.log(`f.abssolute: ${f.absolutePath()}`);
+// console.log(`f.absolute: ${f.absolutePath()}`);
 // console.log(`f.canonical: ${f.canonicalPath()}`);
 // console.log(`f.native: ${f.nativePath()}`);
 // console.log(`f.normalized: ${f.normalizedPath()}`);
@@ -61,7 +61,7 @@ catch (e) {
 
 // f = new File('~~/.sencha');
 // console.log(`f: ${f}`);
-// console.log(`f.abssolute: ${f.absolutePath()}`);
+// console.log(`f.absolute: ${f.absolutePath()}`);
 // //console.log(`f.canonical: ${f.canonicalPath()}`);
 // console.log(`f.native: ${f.nativePath()}`);
 // console.log(`f.normalized: ${f.normalizedPath()}`);

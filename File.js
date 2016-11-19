@@ -1976,6 +1976,49 @@ class File {
         return pending;
     }
 
+    static _getAttribs (attribs) {
+        let attributes = File._attributes;
+        let n = attributes.length;
+        let str = attribs;
+        let attrMap = File._attrMap;
+        let map = File.Attribs;
+        let mask = 0;
+        let c, i, ret;
+
+        if (typeof str === 'string') {
+            // Turn string into a bitmask ('HCA' === 16+2+1 === 19)
+            for (i = 0; i < str.length; ++i) {
+                c = str[i];
+                if (!attrMap[c]) {
+                    throw new Error(`Invalid attribute code "${c}"`);
+                }
+                mask |= attrMap[c];
+            }
+
+            if (!(ret = map[str] || map[str.toUpperCase()])) {
+                //TODO
+            }
+        }
+        else {
+            //Convert fswin attribute object to a mask
+            for (i = 0; i < n; ++i) {
+                let a = attributes[i];
+                if (attribs[a[0]]) {
+                    mask |= 1 << i;
+
+                }
+            }
+        }
+
+        if (!ret && !(ret = map[mask])) {
+            map[mask] = ret = new Attribute(mask);
+
+            map[ret.text.toLowerCase()] = map[ret.text] = ret;
+        }
+
+        return ret;
+    }
+
 } // class File
 
 const proto = File.prototype;
@@ -1997,6 +2040,107 @@ File.CASE = !isWin && !isMac;
 File.isDirectory = File.isDir;
 File.re = re;
 File.separator = Path.sep;
+
+//--------------------
+
+class Attribute {
+    constructor (mask) {
+        let attributes = File._attributes,
+            all = File.Attribs,
+            n = attributes.length,
+            text = '',
+            c, i;
+
+        // Build the text in canonical order while we set the appropriate flags:
+        for (i = 0; i < n; ++i) {
+            c = attributes[i][1];
+
+            if (mask & (1 << i)) {
+                text += c;
+                this[c] = true;
+            } else {
+                this[c] = false;
+            }
+        }
+
+        this.text = text;
+
+        all[text] = all[text.toLowerCase()] = all[mask] = this;
+    }
+}
+
+File.Attribute = Attribute;
+
+File._attrMap = {};
+File.Attribs = {};
+
+File.Attribs.null = new Attribute(0);
+
+File._attributes = [
+    //IS_DEVICE
+    //IS_NOT_CONTENT_INDEXED
+    //IS_SPARSE_FILE
+    //IS_TEMPORARY
+    //IS_INTEGRITY_STREAM
+    //IS_NO_SCRUB_DATA
+    //IS_REPARSE_POINT
+
+    [ 'IS_ARCHIVED',    'A' ], // 1
+    [ 'IS_COMPRESSED',  'C' ], // 2
+    [ 'IS_DIRECTORY',   'D' ], // 4
+    [ 'IS_ENCRYPTED',   'E' ], // 8
+    [ 'IS_HIDDEN',      'H' ], // 16
+    [ 'IS_OFFLINE',     'O' ], // 32
+    [ 'IS_READ_ONLY',   'R' ], // 64
+    [ 'IS_SYSTEM',      'S' ]  // 128
+];
+
+File._attributes.forEach((pair, index) => {
+    let c = pair[1];
+    let b = 1 << index;
+
+    File._attrMap[c] = b;
+    File._attrMap[b] = c;
+});
+
+const _statModes = {
+    l: {
+        asyncStat: 'asyncStatLink',
+        stat: 'statLink'
+    },
+    '': {
+        asyncStat: 'asyncStat',
+        stat: 'stat'
+    }
+};
+
+function addTypeTest (name, statModes) {
+    proto['async' + name[0].toUpperCase() + name.substr(1)] = function (mode) {
+        let fn = statModes[mode || ''];
+        return this[fn.asyncStat]().then(stat => {
+            return stat ? stat[name]() : false;
+        });
+    };
+
+    return proto[name] = function (mode) {
+        let fn = statModes[mode || ''];
+        let stat = this[fn.stat]();
+
+        return stat ? stat[name]() : false;
+    };
+}
+
+addTypeTest('isSymbolicLink', { l: _statModes.l, '': _statModes.l });
+
+[
+    'isBlockDevice', 'isCharacterDevice', 'isDirectory', 'isFile', 'isFIFO',
+    'isSocket'
+].forEach(fn => addTypeTest(fn, _statModes));
+
+proto.isDir = proto.isDirectory;
+proto.asyncIsDir = proto.asyncIsDirectory;
+proto.isSymLink = proto.isSymbolicLink;
+proto.asyncIsSymLink = proto.asyncIsSymbolicLink;
 
 //------------------------------------------------------------------------
 
@@ -2447,7 +2591,13 @@ const ACCESS = File.ACCESS = {
 
         rwx: true,
 
-        mask: Fs.constants.R_OK | Fs.constants.W_OK | Fs.constants.X_OK
+        mask: Fs.constants.R_OK | Fs.constants.W_OK | Fs.constants.X_OK,
+
+        error: null,
+        EACCES: false,
+        ENOENT: false,
+        denied: false,
+        notFound: false
     }
 };
 
@@ -2455,7 +2605,7 @@ ACCESS[ACCESS.rwx.mask] = ACCESS.RWX = File.RWX = ACCESS.rwx;
 
 [Fs.constants.R_OK, Fs.constants.W_OK, Fs.constants.X_OK].forEach((mask, index, array) => {
     let c = 'rwx'[index];
-    let obj = ACCESS[c] = ACCESS[c.toUpperCase()] = File[c.toUpperCase()] = {
+    let obj = Object.assign({}, ACCESS.rwx, {
         name: c,
 
         r: c === 'r',
@@ -2469,9 +2619,11 @@ ACCESS[ACCESS.rwx.mask] = ACCESS.RWX = File.RWX = ACCESS.rwx;
         rwx: false,
 
         mask: mask
-    };
+    });
 
-    ACCESS[obj.mask] = obj;
+    ACCESS[c] = ACCESS[c.toUpperCase()] = File[c.toUpperCase()] = obj;
+    ACCESS[mask] = obj;
+
     Object.freeze(obj);
 
     for (let i = index + 1; i < array.length; ++i) {
@@ -2490,46 +2642,55 @@ ACCESS[ACCESS.rwx.mask] = ACCESS.RWX = File.RWX = ACCESS.rwx;
     }
 });
 
+const zeroDate = new Date();
+zeroDate.setTime(0);
+
+['ENOENT:denied', 'EACCES:notFound'].forEach(special => {
+    const pair = special.split(':');
+    const code = pair[0];
+    const name = pair[1];
+    const NAME = name.toUpperCase();
+    const FileStats = File.STAT || (File.STAT = {});
+
+    let obj = Object.assign({}, ACCESS.rwx, {
+        name: name,
+
+        r: false,
+        w: false,
+        x: false,
+
+        rw: false,
+        rx: false,
+        wx: false,
+
+        rwx: false,
+
+        mask: 0
+    });
+
+    // ACCESS.EACCES, ACCESS.denied, ACCESS.DENIED
+    ACCESS[code] = ACCESS[name] = ACCESS[NAME] = obj;
+
+    obj[code] = obj[name] = true; // acc.EACCES, acc.denied
+    obj.error = code;  // acc.error = 'EACCES'
+
+    Object.freeze(obj);
+
+    // File.STAT.EACCES, File.STAT.denied, File.STAT.DENIED
+    FileStats[code] = FileStats[name] = FileStats[NAME] = obj = new Fs.Stats();
+
+    obj.birthtime = obj.atime = obj.mtime = obj.ctime = zeroDate;
+    obj.size = 0;
+    obj.attribs = '';
+
+    obj[code] = obj[name] = true; // st.EACCES, st.denied
+    obj.error = code; // st.error = 'EACCES'
+
+    Object.freeze(obj);
+});
+
 Object.freeze(ACCESS.rwx);
 Object.freeze(ACCESS);
-
-//--------------------
-
-const linky = {
-    asyncStat: 'asyncStatLink',
-    stat: 'statLink'
-};
-
-const normal = {
-    asyncStat: 'asyncStat',
-    stat: 'stat'
-};
-
-function addTypeTest (name, normal, link) {
-    proto['async' + name[0].toUpperCase() + name.substr(1)] = function () {
-        return this[statMethodAsync]().then(stat => {
-            return (stat ? stat[name]() : false);
-        });
-    };
-
-    return proto[name] = function () {
-        let stat = this[statMethod]();
-
-        return (stat ? stat[name]() : false);
-    };
-}
-
-addTypeTest('isSymbolicLink', 'statLink', 'asyncStatLink');
-
-[
-    'isBlockDevice', 'isCharacterDevice', 'isDirectory', 'isFile', 'isFIFO',
-    'isSocket'
-].forEach(fn => addTypeTest(fn));
-
-proto.isDir = proto.isDirectory;
-proto.asyncIsDir = proto.asyncIsDirectory;
-proto.isSymLink = proto.isSymbolicLink;
-proto.asyncIsSymLink = proto.asyncIsSymbolicLink;
 
 //------------------------------------------------------------
 
@@ -2538,7 +2699,7 @@ class Win {
         return new Promise((resolve, reject) => {
             var process = results => {
                 if (results) {
-                    resolve(Win.convertAttr(results));
+                    resolve(File._getAttribs(results));
                 }
                 else {
                     reject(new Error(`Cannot get attributes for ${path}`));
@@ -2553,41 +2714,9 @@ class Win {
 
     static attrib (path) {
         var attr = fswin.getAttributesSync(path);
-        return Win.convertAttr(attr);
-    }
-
-    static convertAttr (attr) {
-        var ret = '';
-
-        for (let i = 0, n = Win.attributes.length; i < n; ++i) {
-            let a = Win.attributes[i];
-            if (attr[a[0]]) {
-                ret += a[1];
-            }
-        }
-
-        return ret;
+        return File._getAttribs(attr);
     }
 }
-
-Win.attributes = [
-    //IS_DEVICE
-    //IS_NOT_CONTENT_INDEXED
-    //IS_SPARSE_FILE
-    //IS_TEMPORARY
-    //IS_INTEGRITY_STREAM
-    //IS_NO_SCRUB_DATA
-    //IS_REPARSE_POINT
-
-    [ 'IS_ARCHIVED',    'A' ],
-    [ 'IS_COMPRESSED',  'C' ],
-    [ 'IS_DIRECTORY',   'D' ],
-    [ 'IS_ENCRYPTED',   'E' ],
-    [ 'IS_HIDDEN',      'H' ],
-    [ 'IS_OFFLINE',     'O' ],
-    [ 'IS_READ_ONLY',   'R' ],
-    [ 'IS_SYSTEM',      'S' ]
-];
 
 File.Win = isWin && Win;
 
