@@ -50,6 +50,13 @@ The `File` API strives to be purely consistent on these points:
   instance (when paths are involved).
  - Asynchronous methods are named with the "async" prefix and return a Promise.
  - Callbacks passed to async methods can return immediate results or Promises.
+ - As much as possible, exceptions and `null` return values are avoided. For
+  example, `stat()` returns an object in all cases but that object may have an
+  `error` property.
+ - Where reasonable, objects are cached to avoid GC pressure. For example, things
+  like access masks, file attributes, status errors, directory list modes, etc. are
+  lazily cached as immutable (`Object.freeze()` enforced) instances and reused as
+  needed.
 
 ## Path Manipulation
 
@@ -113,8 +120,9 @@ You can compare two paths in a few different ways:
 
  - `compare(o)` - Returns -1, 0 or 1 if `this` is less, equal or greater than `o`
  - `equals(o)` - Returns `true` if `this` is equal to `o` (`compare(o) === 0`)
- - `prefixes(o)` - Returns `true` if `this` is a path prefix of `o`. Best to
-  use `absolutify()` on both instances first to avoid issues with `..` segments.
+ - `prefixes(o)` - Returns `true` if `this` is a path prefix of `o`. It is
+  recommended to use `absolutify()` on both instances first to avoid confusion with
+  `..` segments.
 
 File name comparisons are case-insensitive on Windows and Mac OS X, so we have
 
@@ -135,7 +143,8 @@ Some useful information about a file path:
 
 To get information about the file on disk:
 
- - `access()` - Returns a `FileAccess` object or `null` if the file doesn't exist.
+ - `access()` - Returns a `File.Access` object. If the file does not exist (or some
+  other error is encountered), this object will have an `error` property.
  - `can(mode)` - Returns `true` if this exists with the desired access (`mode` is "r",
   "rw", "rwx", "w", "wx" or "x").
  - `exists()` - Returns `true` if the file exists.
@@ -145,12 +154,20 @@ To get information about the file on disk:
  - `isHidden()` - Returns `true` if this file does not exist or is hidden. Note that on
   Windows, hidden state is not based on a file name convention (".hidden") but is a bit
   stored in the file-system (see below).
- - `stat()` / `restat()` - Returns `fs.statSync(this.path)` (an `fs.Stats`).
- - `statLink()` / `restatLink()` - Returns `fs.lstatSync(this.path)` (an `fs.Stats`).
+ - `stat()` / `restat()` - Returns `fs.statSync(this.path)` (an `fs.Stats`). If the
+  file does not exist (or some other error is encountered), this object will have an
+  `error` property.
+ - `statLink()` / `restatLink()` - Returns `fs.lstatSync(this.path)` (an `fs.Stats`). If
+  the file does not exist (or some other error is encountered), this object will have an
+  `error` property.
+
+The `error` property will be a value like `"ENOENT"` (for file/folder not found), and
+`"EACCES"` or `"EPERM"` for permission denied. These codes come directly from the
+underlying API.
 
 In asynchronous form:
 
- - `asyncAccess()` - Promises a `FileAccess`
+ - `asyncAccess()` - Promises a `File.Access`
  - `asyncCan(mode)` - Promises `true` or `false`.
  - `asyncExists()` - Promises `true` or `false`.
  - `asyncHas(rel)` - TODO
@@ -163,12 +180,11 @@ In asynchronous form:
 ### File Status
 
 The `[fs.Stat](https://nodejs.org/api/fs.html#fs_class_fs_stats)` structure is augmented
-on Windows with an `attribs` property. This is a string with any of the following
-characters:
+with an `attrib` property. This is an instance of `File.Attribute` and will have these
+boolean properties:
 
  - `A` - Archive
  - `C` - Compressed
- - `D` - Directory
  - `E` - Encrypted
  - `H` - Hidden
  - `O` - Offline
@@ -176,31 +192,19 @@ characters:
  - `S` - System
 
 The `[fswin](https://www.npmjs.com/package/fswin)` module is used to retrieve this
-information.
+information on Windows. On other platforms, this object contains `false` values for all
+of the above properties.
 
-A `fs.Stat` object is cached on the `File` instance by the `stat()` family of methods and
-a separate instance is cached on by the `statLink()` family. These are lazily retrieved
-and then stored for future use. To get fresh copies, use the `restat()` family of methods.
+An `fs.Stat` object is cached on the `File` instance by the `stat()` family of methods
+and a separate instance is cached on by the `statLink()` family. These are lazily
+retrieved and then stored for future use. To get fresh copies, use the `restat()` family
+of methods.
 
-### FileAccess
+### File.Access
 
-`FileAccess` objects are succinct descriptions of read, write and execute permission
-masks. These replace the use of fs.constants.R_OK, fs.constants.W_OK and
-fs.constants.X_OK. For example:
-    
-    let mode = fs.statSync(file).mode;
-    
-    if (mode & fs.constants.R_OK && mode & fs.constants.W_OK) {
-        // path is R and W
-    }
-
-Or using `File` and `FileAccess`:
-
-    if (file.access().rw) {
-        // path is R and W
-    }
-
-To handle the case where the file may not exist, compare:
+`File.Access` objects are succinct descriptions of read, write and execute permission
+masks. These replace the use of `fs.constants.R_OK`, `fs.constants.W_OK` and
+`fs.constants.X_OK`. For example:
 
     try {
         let mode = fs.statSync(file).mode;
@@ -213,15 +217,40 @@ To handle the case where the file may not exist, compare:
         // ignore... file does not exist
     }
 
-But using `File` this can be:
+Or using `File` and `File.Access`:
+
+    if (file.access().rw) {
+        // file exists and is R & W
+    }
+
+Alternatively, there is the `can()` method:
 
     if (file.can('rw')) {
         // file exists and is R & W
     }
 
-There are a fixed set of `FileAccess` objects, one for each combination of R, W and X
-permissions: `r`, `rw`, `rx`, `rwx`, `w`, `wx`, `x`. Each instance also has these
-same properties as boolean values. The full set of properties is a bit larger:
+When the file does not exist, or an error is encountered, the object returned by the
+`access()` method will have an `error` property. Since the access bits are all `false`
+in this case, this distinction if often unimportant (as above).
+
+To check for errors:
+
+    var acc = file.accecss();
+    
+    if (acc.rw) {
+        // file exists and has R/W access
+    }
+    else if (acc.error === 'ENOENT') {
+        // file does not exist...
+    }
+    else if (acc.error === 'EACCES' || acc.error === 'EPERM') {
+        // access or permission error...
+    }
+    ...
+
+There are a fixed set of immutable `File.Access` objects, one for each combination of
+R, W and X permissions: `r`, `rw`, `rx`, `rwx`, `w`, `wx`, `x`. Each instance also has
+these same properties as boolean values. The full set of properties is a bit larger:
 
  - `r` - True if `R_OK` is set.
  - `rw` - True if `R_OK` and `W_OK` are both set.
@@ -236,37 +265,40 @@ same properties as boolean values. The full set of properties is a bit larger:
 ### Classification
 
 It is often important to know if a file is a directory or other type of entity. This
-information is fundamentally a result of the `stat()` family but for convenience is
+information is fundamentally the business of the `stat()` family but for convenience is
 also provided on the `File` instance:
 
- - `isDirectory`
- - `isFile`
- - `isBlockDevice`
- - `isCharacterDevice`
- - `isFIFO`
- - `isSocket`
- - `isSymbolicLink`
+ - `isDirectory(mode)`
+ - `isFile(mode)`
+ - `isBlockDevice(mode)`
+ - `isCharacterDevice(mode)`
+ - `isFIFO(mode)`
+ - `isSocket(mode)`
+ - `isSymbolicLink(mode)`
 
 In addition, the following shorthand methods are also available:
 
- - `isDir` (alias for `isDirectory()`)
- - `isSymLink` (alias for `isSymbolicLink()`)
+ - `isDir(mode)` (alias for `isDirectory()`)
+ - `isSymLink(mode)` (alias for `isSymbolicLink()`)
 
 These are also available as async methods:
 
- - `asyncIsDir`
- - `asyncIsDirectory`
- - `asyncIsFile`
- - `asyncIsBlockDevice`
- - `asyncIsCharacterDevice`
- - `asyncIsFIFO`
- - `asyncIsSocket`
- - `asyncIsSymLink`
- - `asyncIsSymbolicLink`
+ - `asyncIsDir(mode)`
+ - `asyncIsDirectory(mode)`
+ - `asyncIsFile(mode)`
+ - `asyncIsBlockDevice(mode)`
+ - `asyncIsCharacterDevice(mode)`
+ - `asyncIsFIFO(mode)`
+ - `asyncIsSocket(mode)`
+ - `asyncIsSymLink(mode)`
+ - `asyncIsSymbolicLink(mode)`
 
-Since the nature of a file seldom changes on a whim, the results of these tests are
-stored on the `File` instance. If this is undesired, it is better to stick with the
-`stat()` family since it provides a way to refresh this information (`restat()`).
+The optional `mode` parameter can be `'l'` (lowercase-L) to use the `statLink()` (or
+`asyncStatLink()`) method to determine the result.
+
+Since the nature of a file seldom changes on a whim, these methods use the `stat()`
+methods and their cached information. If this is undesired, these results can be
+refreshed using the `restat()` family of methods.
 
 ## Directory Listing
 
@@ -361,7 +393,7 @@ Asynchronous forms (TODO - not implemented yet):
 
 The `walk` method's `before` and `after` handlers looks like this:
 
-    function handler (file, state) {
+    function beforeOrAfter (file, state) {
         if (file.isDir() && ...) {
             return false;  // do not recurse into file (before only)
         }
@@ -451,6 +483,9 @@ When it is time to save the data, the process looks very symmetric:
 Instead of the manual alternative:
 
     fs.writeFileSync(pkg, JSON.stringify(data, null, '    '), 'utf8');
+
+**NOTE:** Unlike most of the `File` API, these methods throw exceptions (or reject
+Promises) on failure.
 
 ### Predefined Readers
 
@@ -611,6 +646,7 @@ method). If the string may contain `"~"` elements, the safe conversion would be:
  - `resolve(fs...)` - Return `path.resolve()` on the `File` or `String` args as a `File`.
  - `resolvePath(fs...)` - Return `path.resolve()` on the `File` or `String` args as a `String`.
  - `split(fs)`- Returns a `String[]` from the `File` or `String`.
+ - `stat(fs)` - Returns the `stat()` for the `File` or `String`.
  - `sorter(fs1, fs2)` - Calls `File.from(fs1).compare(fs2)` (useful for sorting
   `File[]` and `String[]`).
 

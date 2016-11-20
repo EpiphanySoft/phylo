@@ -7,6 +7,8 @@ var f = File.temp();
 
 console.log(`home: ${File.home()}`);
 console.log(`profile: ${File.profile('Acme')}`);
+console.log(`profile: ${File.profile()}`);
+console.log(`profile.stat: `, File.profile().stat());
 
 File.asyncTemp().then(t => {
     console.log(`asyncTemp: ${t}`);
@@ -93,10 +95,10 @@ catch (e) {
 
 // f = File.cwd();
 // f.asyncWalk('', (item, state) => {
-//     let c = item.isDirectory() ? '>' : ' ';
-//     console.log(`${c} ${' '.repeat(state.stack.length * 4)}${item.name} - ${item._stat ? item._stat.attribs : ''}`);
+//     //let c = item.isDirectory() ? '>' : ' ';
+//     //console.log(`${c} ${' '.repeat(state.stack.length * 4)}${item.name} - ${item._stat ? item._stat.attribs : ''}`);
 // }, (item, state) => {
-//     console.log(`< ${' '.repeat(state.stack.length * 4)}${item.name} - ${item._stat ? item._stat.attribs : ''}`);
+//     console.log(`< ${' '.repeat(state.stack.length * 4)}${item.name} - ${item.stat().attrib.text}`);
 // }).then(() => {
 //     console.log('done');
 // });

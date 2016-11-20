@@ -48,91 +48,6 @@ function detildify (p) {
     return p;
 }
 
-/**
- * @class File.Access
- * This class contains useful boolean properties that categories file access. This makes
- * for shorter code then use of `fs.constants.R_OK` and related masks.
- *
- *      // path is a string path
- *
- *      let mode = fs.statSync(path).mode;
- *
- *      if (mode & fs.constants.R_OK && mode & fs.constants.W_OK) {
- *          // path is R and W
- *      }
- *      // else path is missing R and/or W
- *
- *      // or
- *
- *      try {
- *          fs.accessSync(path, fs.constants.R_OK | fs.constants.W_OK);
- *
- *          // path is R and W
- *      }
- *      catch (e) {
- *          // path is missing R and/or W
- *      }
- *
- * Or using `File`:
- *
- *      if (file.access().rw) {
- *          // file exists and has R and W access
- *      }
- */
-
-/**
- * @property {String} error
- * @readonly
- * The error encountered determining the file's access. This is `null` if the file's
- * access was determined.
- */
-/**
- * @property {Number} mask
- * @readonly
- * This property holds the bit-wise OR of the available access modes `fs.constants.R_OK`,
- *  `fs.constants.W_OK` and/or  `fs.constants.X_OK`.
- */
-/**
- * @property {"r"/"rw"/"rwx"/"w"/"wx"/"x"} name
- * @readonly
- * This string holds the available access modes as single letters.
- */
-/**
- * @property {Boolean} r
- * @readonly
- * This property is `true` if the file can be read.
- */
-/**
- * @property {Boolean} rw
- * @readonly
- * This property is `true` if the file can be read and written.
- */
-/**
- * @property {Boolean} rx
- * @readonly
- * This property is `true` if the file can be read and executed.
- */
-/**
- * @property {Boolean} rwx
- * @readonly
- * This property is `true` if the file can be read, written and executed.
- */
-/**
- * @property {Boolean} w
- * @readonly
- * This property is `true` if the file can be written.
- */
-/**
- * @property {Boolean} wx
- * @readonly
- * This property is `true` if the file can be written and executed.
- */
-/**
- * @property {Boolean} x
- * @readonly
- * This property is `true` if the file can be executed.
- */
-
 //================================================================================
 
 /**
@@ -2023,9 +1938,110 @@ function addTypeTest (name, statModes) {
 
 addTypeTest('isSymbolicLink', { l: _statModes.l, '': _statModes.l });
 
+/**
+ * This method will potentially use cached stats (of the specified type) for the file.
+ * If this is not desired, use `stat().isBlockDevice()` instead.
+ * @method isBlockDevice
+ * @param {"l"} [mode=null] An optional mode setting for the type of stats to use for
+ * the determination. By default `stat()` is used. Pass `'l'` (lowercase-L) to enable
+ * `statLink()` mode.
+ * @return {Boolean}
+ */
+/**
+ * This is the asynchronous equivalent of `isBlockDevice()`.
+ * @method asyncIsBlockDevice
+ * @param {"l"} [mode=null] An optional mode setting for the type of stats to use for
+ * the determination. By default `stat()` is used. Pass `'l'` (lowercase-L) to enable
+ * `statLink()` mode.
+ * @return {Promise<Boolean>}
+ */
+/**
+ * This method will potentially use cached stats (of the specified type) for the file.
+ * If this is not desired, use `stat().isCharacterDevice()` instead.
+ * @method isCharacterDevice
+ * @param {"l"} [mode=null] An optional mode setting for the type of stats to use for
+ * the determination. By default `stat()` is used. Pass `'l'` (lowercase-L) to enable
+ * `statLink()` mode.
+ * @return {Boolean}
+ */
+/**
+ * This is the asynchronous equivalent of `isCharacterDevice()`.
+ * @method asyncIsCharacterDevice
+ * @param {"l"} [mode=null] An optional mode setting for the type of stats to use for
+ * the determination. By default `stat()` is used. Pass `'l'` (lowercase-L) to enable
+ * `statLink()` mode.
+ * @return {Promise<Boolean>}
+ */
+/**
+ * This method will potentially use cached stats (of the specified type) for the file.
+ * If this is not desired, use `stat().isDirectory()` instead.
+ * @method isDirectory
+ * @param {"l"} [mode=null] An optional mode setting for the type of stats to use for
+ * the determination. By default `stat()` is used. Pass `'l'` (lowercase-L) to enable
+ * `statLink()` mode.
+ * @return {Boolean}
+ */
+/**
+ * This is the asynchronous equivalent of `isDirectory()`.
+ * @method asyncIsDirectory
+ * @param {"l"} [mode=null] An optional mode setting for the type of stats to use for
+ * the determination. By default `stat()` is used. Pass `'l'` (lowercase-L) to enable
+ * `statLink()` mode.
+ * @return {Promise<Boolean>}
+ */
+/**
+ * This method will potentially use cached stats (of the specified type) for the file.
+ * If this is not desired, use `stat().isFile()` instead.
+ * @method isFile
+ * @param {"l"} [mode=null] An optional mode setting for the type of stats to use for
+ * the determination. By default `stat()` is used. Pass `'l'` (lowercase-L) to enable
+ * `statLink()` mode.
+ * @return {Boolean}
+ */
+/**
+ * This is the asynchronous equivalent of `isFile()`.
+ * @method asyncIsFile
+ * @param {"l"} [mode=null] An optional mode setting for the type of stats to use for
+ * the determination. By default `stat()` is used. Pass `'l'` (lowercase-L) to enable
+ * `statLink()` mode.
+ * @return {Promise<Boolean>}
+ */
+/**
+ * This method will potentially use cached stats (of the specified type) for the file.
+ * If this is not desired, use `stat().isFIFO()` instead.
+ * @method isFIFO
+ * @param {"l"} [mode=null] An optional mode setting for the type of stats to use for
+ * the determination. By default `stat()` is used. Pass `'l'` (lowercase-L) to enable
+ * `statLink()` mode.
+ * @return {Boolean}
+ */
+/**
+ * This is the asynchronous equivalent of `isFIFO()`.
+ * @method asyncIsFIFO
+ * @param {"l"} [mode=null] An optional mode setting for the type of stats to use for
+ * the determination. By default `stat()` is used. Pass `'l'` (lowercase-L) to enable
+ * `statLink()` mode.
+ * @return {Promise<Boolean>}
+ */
+/**
+ * This method will potentially use cached stats (of the specified type) for the file.
+ * If this is not desired, use `stat().isSocket()` instead.
+ * @method isSocket
+ * @param {"l"} [mode=null] An optional mode setting for the type of stats to use for
+ * the determination. By default `stat()` is used. Pass `'l'` (lowercase-L) to enable
+ * `statLink()` mode.
+ * @return {Boolean}
+ */
+/**
+ * This is the asynchronous equivalent of `isSocket()`.
+ * @method asyncIsSocket
+ * @param {"l"} [mode=null] An optional mode setting for the type of stats to use for
+ * the determination. By default `stat()` is used. Pass `'l'` (lowercase-L) to enable
+ * `statLink()` mode.
+ * @return {Promise<Boolean>}
+ */
 [
-    'isBlockDevice', 'isCharacterDevice', 'isDirectory', 'isFile', 'isFIFO',
-    'isSocket'
+    'isBlockDevice', 'isCharacterDevice', 'isDirectory', 'isFile', 'isFIFO', 'isSocket'
 ].forEach(fn => addTypeTest(fn, _statModes));
 
 proto.isDir = proto.isDirectory;
@@ -2035,28 +2051,124 @@ proto.asyncIsSymLink = proto.asyncIsSymbolicLink;
 
 //--------------------
 
+/**
+ * @class File.Access
+ * This class contains useful boolean properties that categories file access. This makes
+ * for shorter code then use of `fs.constants.R_OK` and related masks.
+ *
+ *      // path is a string path
+ *
+ *      let mode = fs.statSync(path).mode;
+ *
+ *      if (mode & fs.constants.R_OK && mode & fs.constants.W_OK) {
+ *          // path is R and W
+ *      }
+ *      // else path is missing R and/or W
+ *
+ *      // or
+ *
+ *      try {
+ *          fs.accessSync(path, fs.constants.R_OK | fs.constants.W_OK);
+ *
+ *          // path is R and W
+ *      }
+ *      catch (e) {
+ *          // path is missing R and/or W
+ *      }
+ *
+ * Or using `File`:
+ *
+ *      if (file.access().rw) {
+ *          // file exists and has R and W access
+ *      }
+ *
+ * NOTE: Instances of this class are created automatically and not be user code.
+ */
 class Access {
     static getError (error) {
         return Access[error] || new Access('', error);
     }
 
     constructor (name, error) {
+        /**
+         * @property {Boolean} r
+         * @readonly
+         * This property is `true` if the file can be read.
+         */
         this.r = name.indexOf('r') > -1;
+
+        /**
+         * @property {Boolean} w
+         * @readonly
+         * This property is `true` if the file can be written.
+         */
         this.w = name.indexOf('w') > -1;
+
+        /**
+         * @property {Boolean} x
+         * @readonly
+         * This property is `true` if the file can be executed.
+         */
         this.x = name.indexOf('x') > -1;
 
+        /**
+         * @property {Boolean} rw
+         * @readonly
+         * This property is `true` if the file can be read and written.
+         */
         this.rw = this.r && this.w;
+
+        /**
+         * @property {Boolean} rx
+         * @readonly
+         * This property is `true` if the file can be read and executed.
+         */
         this.rx = this.r && this.x;
+
+        /**
+         * @property {Boolean} wx
+         * @readonly
+         * This property is `true` if the file can be written and executed.
+         */
         this.wx = this.w && this.x;
 
+        /**
+         * @property {Boolean} rwx
+         * @readonly
+         * This property is `true` if the file can be read, written and executed.
+         */
         this.rwx = this.r && this.w && this.x;
 
+        /**
+         * @property {String} error
+         * @readonly
+         * The error encountered determining the file's access. This is `null` if the
+         * file's access was determined.
+         */
         this.error = error || null;
+
+        /**
+         * @property {Number} mask
+         * @readonly
+         * This property holds the bit-wise OR of the available access modes
+         * `fs.constants.R_OK`, `fs.constants.W_OK` and/or  `fs.constants.X_OK`.
+         */
         this.mask = (this.r ? Fs.constants.R_OK : 0) |
                     (this.w ? Fs.constants.W_OK : 0) |
                     (this.x ? Fs.constants.X_OK : 0);
 
+        /**
+         * @property {"r"/"rw"/"rwx"/"w"/"wx"/"x"} name
+         * @readonly
+         * This string holds the available access modes as lowercase single letters.
+         */
         this.name = name;
+
+        /**
+         * @property {"R"/"RW"/"RWX"/"W"/"WX"/"X"} nameUpper
+         * @readonly
+         * This string holds the available access modes as uppercase single letters.
+         */
         this.nameUpper = name.toUpperCase();
 
         if (error) {
@@ -2160,8 +2272,6 @@ File.Attribute = Attribute;
 Attribute.cache = {};
 Attribute.map = {};
 
-Attribute.NULL = Attribute.cache.null = new Attribute(0);
-
 Attribute.all = [
     //IS_DEVICE
     //IS_DIRECTORY
@@ -2180,6 +2290,8 @@ Attribute.all = [
     [ 'IS_READ_ONLY',   'R' ], // 32
     [ 'IS_SYSTEM',      'S' ]  // 64
 ];
+
+Attribute.NULL = Attribute.cache.null = new Attribute(0);
 
 Attribute.all.forEach((pair, index) => {
     let c = pair[1];
@@ -2285,7 +2397,7 @@ class Stat {
 
         this.birthtime = this.atime = this.mtime = this.ctime = zeroDate;
         this.size = 0;
-        this.attrib = Attribute.getError(error);
+        this.attrib = Attribute.NULL;
 
         Stat[error] = this;
 
