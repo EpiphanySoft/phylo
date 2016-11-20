@@ -702,12 +702,10 @@ class File {
         let a = this.unterminatedPath();
         let b = other.unterminatedPath();
 
-        // TODO locale
-
         // If the platform has case-insensitive file names, ignore case...
         if (File.NOCASE) {
-            a = a.toLowerCase();
-            b = b.toLowerCase();
+            a = a.toLocaleLowerCase();
+            b = b.toLocaleLowerCase();
         }
 
         return (a < b) ? -1 : ((b < a) ? 1 : 0);
@@ -737,8 +735,8 @@ class File {
             let b = subPath.slashifiedPath();
 
             if (File.NOCASE) {
-                a = a.toLowerCase();
-                b = b.toLowerCase();
+                a = a.toLocaleLowerCase();
+                b = b.toLocaleLowerCase();
             }
 
             if (a.startsWith(b)) {
