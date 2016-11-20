@@ -192,6 +192,25 @@ class File {
     }
 
     /**
+     * Converts a file-system "glob" pattern into a `RegExp` instance.
+     *
+     * For example:
+     *
+     *      glob('*.txt')      ==> /^[^/]
+     *      glob('** /*.txt")  ==>
+     *
+     *
+     * @param {String} pattern The glob pattern to convert.
+     * @param {"e"/"es"/"s"} [options=null] Pass `"e"` to enable "extended" globs like
+     * in Bash. Pass "s" to treat globs more like the shell which matches `"/"` characters
+     * with a `"*"`. By default, only `"**"` matches `"/"`.
+     * @returns {*}
+     */
+    static glob (pattern, options) {
+        return globToRegExp(pattern, globToRegExpOptions[options || '']);
+    }
+
+    /**
      * Returns the `os.homedir()` as a `File` instance. On Windows, this is something
      * like `"C:\Users\Name"`.
      *
@@ -1746,7 +1765,8 @@ class File {
     }
 
     /**
-     * Asynchronously descends the file-system starting with the current location, calling
+     * Asynchronously descends the file-system starting with the current location,
+     * calling
      * the provided `before` for each file or folder.
      *
      * @param {String} [mode] The directory `list` mode string to control the traversal.
@@ -1756,11 +1776,12 @@ class File {
      * @param {File} before.file The file object referencing the current file or folder
      * to examine.
      * @param {File.Walker} before.state The state object tracking the traversal.
-     * @param {Promise<Boolean>} before.return Return `false` to not descend into a folder.
-     * Can be a Promise to this boolean result.
+     * @param {Promise<Boolean>} before.return Return `false` to not descend into a
+     *     folder. Can be a Promise to this boolean result.
      * @param {Function} after A function that will be called after a folder has been
      * descended.
-     * @param {File} after.file The file object referencing the current folder to examine.
+     * @param {File} after.file The file object referencing the current folder to
+     *     examine.
      * @param {File.Walker} after.state The state object tracking the traversal.
      * @param {Promise<Boolean>} after.return Can return a Promise to process before
      * continuing.
@@ -2292,6 +2313,169 @@ Attribute.all.forEach((pair, index) => {
     Attribute.map[c] = b;
     Attribute.map[b] = c;
 });
+
+//--------------------
+
+/**
+ * @class File.Globber
+ *
+ * ## Extended Mode ('E')
+ * Whether we are matching so called "extended" globs (like bash) and should support
+ * single character matching, matching ranges of characters, group matching, etc.
+ *
+ * ## Singular Wildcards ('S')
+ // When globstar is _false_ (default), '/foo/*' is translated a regexp like
+ // '^\/foo\/.*$' which will match any string beginning with '/foo/'
+ // When globstar is _true_, '/foo/*' is translated to regexp like
+ // '^\/foo\/[^/]*$' which will match any string beginning with '/foo/' BUT
+ // which does not have a '/' to the right of it.
+ // E.g. with '/foo/*' these will match: '/foo/bar', '/foo/bar.txt' but
+ // these will not '/foo/bar/baz', '/foo/bar/baz.txt'
+ // Lastly, when globstar is _true_, '/foo/**' is equivalent to '/foo/*' when
+ // globstar is _false_
+ */
+class Globber {
+    static get (options) {
+        let cache = Globber.cache;
+        let go = cache[options];
+
+        if (!go) {
+            cache[options] = new Globber(options);
+        }
+    }
+
+    constructor (options) {
+        let all = Globber.all;
+
+        this.flags = '';
+        this.global = false;
+
+        for (let i = 0; i < options.length; ++i) {
+            let c = options[i];
+
+            if (all[c]) {
+                this[all[c]] = true;
+            }
+            else {
+                this.flags += c;
+
+                if (c === 'g') {
+                    this.global = true;
+                }
+            }
+        }
+    }
+
+    compile (glob) {
+        var str = String(glob);
+        var reStr = "";
+        var extended = this.extended;
+        var inGroup = false; // true when in a group (eg {*.html,*.js})
+        var c;
+
+        for (var i = 0, len = str.length; i < len; i++) {
+            c = str[i];
+
+            switch (c) {
+                case "\\": case "/": case "$": case "^": case "+": case ".":
+                case "(": case ")": case "=": case "!": case "|":
+                    reStr += "\\" + c;
+                    break;
+
+                case "?":
+                    if (extended) {
+                        reStr += ".";
+                        break;
+                    }
+                    // fall
+                case "[": case "]":
+                    if (extended) {
+                        reStr += c;
+                        break;
+                    }
+                    // fall
+                case "{":
+                    if (extended) {
+                        inGroup = true;
+                        reStr += "(";
+                        break;
+                    }
+                    // fall
+                case "}":
+                    if (extended) {
+                        inGroup = false;
+                        reStr += ")";
+                        break;
+                    }
+                    // fall
+                case ",":
+                    if (inGroup) {
+                        reStr += "|";
+                        break;
+                    }
+                    reStr += "\\" + c;
+                    break;
+
+                case "*":
+                    // Move over all consecutive "*"'s.
+                    // Also store the previous and next characters
+                    var prevChar = str[i - 1];
+                    var starCount = 1;
+                    while (str[i + 1] === "*") {
+                        starCount++;
+                        i++;
+                    }
+                    var nextChar = str[i + 1];
+
+                    if (this.singular) {
+                        // singular mode so treat any number of "*" as one
+                        reStr += ".*";
+                    } else {
+                        // This is a globstar segment if we have...
+                        // multiple "*"'s
+                        var isGlobstar = starCount > 1
+                            // from the start of the segment
+                            && (prevChar === "/" || prevChar === undefined)
+                            // to the end of the segment
+                            && (nextChar === "/" || nextChar === undefined);
+
+                        if (isGlobstar) {
+                            // it's a globstar, so match zero or more path segments
+                            reStr += "(?:[^/]*(?:\/|$))*";
+                            i++; // move over the "/"
+                        } else {
+                            // it's not a globstar, so only match one path segment
+                            reStr += "[^/]*";
+                        }
+                    }
+                    break;
+
+                default:
+                    reStr += c;
+            }
+        }
+
+        // When regexp 'g' flag is specified don't constrain the regex with ^/$
+        if (!this.global) {
+            reStr = "^" + reStr + "$";
+        }
+
+        return new RegExp(reStr, this.flags);
+    }
+}
+
+Globber.all = {
+    E: 'extended',
+    S: 'singular'
+};
+
+Globber.cache = {};
+
+Object.values(Globber.all).forEach(v => {
+    Globber.prototype[v] = false;
+});
+
+File.Globber = Globber;
 
 //--------------------
 
