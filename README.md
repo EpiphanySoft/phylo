@@ -179,7 +179,7 @@ In asynchronous form:
 
 ### File Status
 
-The `[fs.Stat](https://nodejs.org/api/fs.html#fs_class_fs_stats)` structure is augmented
+The [`fs.Stat`](https://nodejs.org/api/fs.html#fs_class_fs_stats) structure is augmented
 with an `attrib` property. This is an instance of `File.Attribute` and will have these
 boolean properties:
 
@@ -191,7 +191,7 @@ boolean properties:
  - `R` - Readonly
  - `S` - System
 
-The `[fswin](https://www.npmjs.com/package/fswin)` module is used to retrieve this
+The [`fswin`](https://www.npmjs.com/package/fswin) module is used to retrieve this
 information on Windows. On other platforms, this object contains `false` values for all
 of the above properties.
 
@@ -495,7 +495,7 @@ readers come predefined:
  - `bin` - An alias for `binary`.
  - `binary` - Reads a file as a buffer.
  - `json` - Extends the `text` reader and provides a `parse` method to
-  deserialize JSON data. This uses the `[json5](https://www.npmjs.com/package/json5)`
+  deserialize JSON data. This uses the [`json5`](https://www.npmjs.com/package/json5)
   module to tolerate human friendly JSON.
  - `json:strict` - Extends `text` reader and uses strict `JSON.parse()`.
  - `text` - Reads a file as `utf8` encoding.
@@ -674,7 +674,7 @@ Instead just do this:
 
 ### Temp
 
-The `temp()` and `asyncTemp()` static methods use the `[tmp](https://www.npmjs.com/package/tmp)`
+The `temp()` and `asyncTemp()` static methods use the [`tmp`](https://www.npmjs.com/package/tmp)
 module to generate a temporary folder in the appropriate location for the platform.
 
 When these methods are called with no `options` argument, they lazily
