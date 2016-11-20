@@ -9,6 +9,7 @@ console.log(`home: ${File.home()}`);
 console.log(`profile: ${File.profile('Acme')}`);
 console.log(`profile: ${File.profile()}`);
 console.log(`profile.stat: `, File.profile().stat());
+console.log(`profile.access: `, File.profile().access());
 
 File.asyncTemp().then(t => {
     console.log(`asyncTemp: ${t}`);
