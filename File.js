@@ -1481,34 +1481,28 @@ class File {
         for (let i = 0, n = names.length; i < n; ++i) {
             let name = names[i];
 
-            if (!listMode.A && listMode.hideDots && name[0] === '.') {
+            if (listMode.hideDots && name[0] === '.') {
                 continue;
             }
 
             let f = new File(this, name);
-            f._parent = this;
-
             let st = listMode.l ? f.statLink() : (listMode.s ? f.stat() : null);
 
             if (listMode.l && listMode.s) {
                 f.stat(); // cache these but use statLink() result
             }
 
-            if (!listMode.A && !st.attrib.H) {
-                continue;
-            }
-            if (listMode.f) {
-                if (st.isDirectory()) {
+            if (listMode.A || st.attrib.H) {
+                if (listMode.f && st.isDirectory()) {
                     continue;
                 }
-            }
-            if (listMode.d) {
-                if (!st.isDirectory()) {
+                if (listMode.d && !st.isDirectory()) {
                     continue;
                 }
-            }
 
-            ret.push(f);
+                f._parent = this;
+                ret.push(f);
+            }
         }
 
         if (listMode.o) {
@@ -2350,7 +2344,7 @@ class ListMode {
         }
 
         // showDots on Windows when options.w is true:
-        this.hideDots = !(File.Win && this.w); // = !showDots
+        this.hideDots = !this.A && !(File.Win && this.w); // = !showDots
     }
 }
 
