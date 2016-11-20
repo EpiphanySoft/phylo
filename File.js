@@ -48,88 +48,6 @@ function detildify (p) {
     return p;
 }
 
-/**
- * @class FileAccess
- * This class contains useful boolean properties that categories file access. This makes
- * for shorter code then use of `fs.constants.R_OK` and related masks.
- *
- *      // path is a string path
- *
- *      let mode = fs.statSync(path).mode;
- *
- *      if (mode & fs.constants.R_OK && mode & fs.constants.W_OK) {
- *          // path is R and W
- *      }
- *      // else path is missing R and/or W
- *
- *      // or
- *
- *      try {
- *          fs.accessSync(path, fs.constants.R_OK | fs.constants.W_OK);
- *
- *          // path is R and W
- *      }
- *      catch (e) {
- *          // path is missing R and/or W
- *      }
- *
- * Or using `File`:
- *
- *      // file is a File instance
- *
- *      if (file.can('rw')) {
- *          // file is R and W
- *      }
- *      // else file is missing R and/or W
- */
-
-/**
- * @property {Number} mask
- * @readonly
- * This property holds the bit-wise OR of the available access modes `fs.constants.R_OK`,
- *  `fs.constants.W_OK` and/or  `fs.constants.X_OK`.
- */
-/**
- * @property {"r"/"rw"/"rwx"/"w"/"wx"/"x"} name
- * @readonly
- * This string holds the available access modes as single letters.
- */
-/**
- * @property {Boolean} r
- * @readonly
- * This property is `true` if the file can be read.
- */
-/**
- * @property {Boolean} rw
- * @readonly
- * This property is `true` if the file can be read and written.
- */
-/**
- * @property {Boolean} rx
- * @readonly
- * This property is `true` if the file can be read and executed.
- */
-/**
- * @property {Boolean} rwx
- * @readonly
- * This property is `true` if the file can be read, written and executed.
- */
-/**
- * @property {Boolean} w
- * @readonly
- * This property is `true` if the file can be written.
- */
-/**
- * @property {Boolean} wx
- * @readonly
- * This property is `true` if the file can be written and executed.
- */
-/**
- * @property {Boolean} x
- * @readonly
- * This property is `true` if the file can be executed.
- */
-
 //================================================================================
 
 /**
@@ -163,18 +81,20 @@ function detildify (p) {
 class File {
     //noinspection JSUnusedGlobalSymbols
     /**
-     * Returns the `FileAccess` object describing the access modes available for the
-     * specified file. This will be `null` if the file does not exist.
+     * Returns the `File.Access` object describing the access modes available for the
+     * specified file. If an error is encountered determining the access (for example,
+     * the file does not exist), the `error` property of the returned object will be
+     * set accordingly.
      *
-     * @param {String/File} file The `File` instance of path as a string.
-     * @return {FileAccess} The `FileAccess` descriptor.
+     * @param {String/File} filePath The `File` instance of path as a string.
+     * @return {File.Access} The `File.Access` descriptor.
      */
-    static access (file) {
-        if (!file) {
-            return null;
+    static access (filePath) {
+        if (!filePath) {
+            return Access.getError('ENOENT');
         }
 
-        return File.from(file).access();
+        return File.from(filePath).access();
     }
 
     /**
@@ -238,27 +158,25 @@ class File {
 
     /**
      * Returns `true` if the specified file exists, `false` if not.
-     * @param {String/File} file The `File` or path to test for existence.
+     * @param {String/File} filePath The `File` or path to test for existence.
      * @return {Boolean} `true` if the file exists.
      */
-    static exists (file) {
-        if (!file) {
-            return false;
-        }
+    static exists (filePath) {
+        var st = File.stat(filePath);
 
-        return File.from(file).exists();
+        return !st.error;
     }
 
     /**
      * Returns a `File` for the specified path (if it is not already a `File`).
-     * @param {String/File} path The `File` or path to convert to a `File`.
+     * @param {String/File} filePath The `File` or path to convert to a `File`.
      * @return {File} The `File` instance.
      */
-    static from (path) {
-        var file = path || null;
+    static from (filePath) {
+        var file = filePath || null;
 
         if (file && !file.$isFile) {
-            file = new this(path);
+            file = new this(filePath);
         }
 
         return file;
@@ -266,11 +184,11 @@ class File {
 
     /**
      * Returns the path as a string given a `File` or string.
-     * @param {String/File} file
+     * @param {String/File} filePath
      * @return {String} The path.
      */
-    static fspath (file) {
-        return ((file && file.$isFile) ? file.fspath : file) || '';
+    static fspath (filePath) {
+        return ((filePath && filePath.$isFile) ? filePath.fspath : filePath) || '';
     }
 
     /**
@@ -285,28 +203,28 @@ class File {
 
     /**
      * Returns `true` if the specified path is a directory, `false` if not.
-     * @param {String/File} file The `File` or path to test.
+     * @param {String/File} filePath The `File` or path to test.
      * @return {Boolean} Whether the file is a directory or not.
      */
-    static isDir (file) {
-        if (!file) {
+    static isDir (filePath) {
+        if (!filePath) {
             return false;
         }
 
-        return File.from(file).isDir();
+        return File.from(filePath).isDir();
     }
 
     /**
      * Returns `true` if the specified path is a file, `false` if not.
-     * @param {String/File} file The `File` or path to test.
+     * @param {String/File} filePath The `File` or path to test.
      * @return {Boolean} Whether the file is a file or not (opposite of isDir).
      */
-    static isFile (file) {
-        if (!file) {
+    static isFile (filePath) {
+        if (!filePath) {
             return false;
         }
 
-        return File.from(file).isFile();
+        return File.from(filePath).isFile();
     }
 
     /**
@@ -344,11 +262,11 @@ class File {
 
     /**
      * Returns the path as a string given a `File` or string.
-     * @param {String/File} file
+     * @param {String/File} filePath
      * @return {String} The path.
      */
-    static path (file) {
-        return ((file && file.$isFile) ? file.path : file) || '';
+    static path (filePath) {
+        return ((filePath && filePath.$isFile) ? filePath.path : filePath) || '';
     }
 
     /**
@@ -424,13 +342,31 @@ class File {
 
     /**
      * Compares two files using the `File` instances' `compare` method.
-     * @param file1 A `File` instance.
-     * @param file2 A `File` instance.
+     * @param filePath1 A `File` instance or string path.
+     * @param filePath2 A `File` instance or string path.
      * @return {Number}
      */
-    static sorter (file1, file2) {
-        var a = File.from(file1);
-        return a.compare(file2);
+    static sorter (filePath1, filePath2) {
+        var a = File.from(filePath1);
+        return a.compare(filePath2);
+    }
+
+    /**
+     * Returns the `fs.Stats` for the specified `File` or path. If the file does not
+     * exist, or an error is encountered determining the stats, the `error` property
+     * will be set accordingly.
+     *
+     * @param {String/File} filePath
+     * @return {fs.Stats}
+     */
+    static stat (filePath) {
+        var f = File.from(filePath);
+
+        if (!f) {
+            return Stat.getError('ENOENT');
+        }
+
+        return f.stat();
     }
 
     /**
@@ -766,12 +702,10 @@ class File {
         let a = this.unterminatedPath();
         let b = other.unterminatedPath();
 
-        // TODO locale
-
         // If the platform has case-insensitive file names, ignore case...
-        if (!File.CASE) {
-            a = a.toLowerCase();
-            b = b.toLowerCase();
+        if (File.NOCASE) {
+            a = a.toLocaleLowerCase();
+            b = b.toLocaleLowerCase();
         }
 
         return (a < b) ? -1 : ((b < a) ? 1 : 0);
@@ -800,9 +734,9 @@ class File {
             let a = this.slashify().unterminatedPath();
             let b = subPath.slashifiedPath();
 
-            if (!File.CASE) {
-                a = a.toLowerCase();
-                b = b.toLowerCase();
+            if (File.NOCASE) {
+                a = a.toLocaleLowerCase();
+                b = b.toLocaleLowerCase();
             }
 
             if (a.startsWith(b)) {
@@ -820,16 +754,20 @@ class File {
     // File system checks
 
     /**
-     * Returns a `FileAccess` object describing the access available for this file. If
-     * the file does not exist, `null` is returned.
+     * Returns a `File.Access` object describing the access available for this file. If
+     * the file does not exist, or some other error is encountered, the `error` property
+     * will be set.
      *
      *      var acc = File.from(s).access();
      *
-     *      if (!acc) {
+     *      if (acc.rw) {
+     *          // file at location s has R and W permission
+     *      }
+     *      else if (acc.error === 'ENOENT') {
      *          // no file ...
      *      }
-     *      else if (acc.rw) {
-     *          // file at location s has R and W permission
+     *      else if (acc.error) {
+     *          // some other error
      *      }
      *
      * Alternatively:
@@ -838,17 +776,16 @@ class File {
      *          // file at location s has R and W permission
      *      }
      *
-     * @return {FileAccess}
+     * @return {File.Access}
      */
     access () {
         var st = this.stat();
 
-        if (st === null) {
-            return null;
+        if (st.error) {
+            return Access.getError(st.error);
         }
 
-        let mask = st.mode & File.RWX.mask;
-        return ACCESS[mask] || null;
+        return Access[st.mode & Access.rwx.mask];
     }
 
     /**
@@ -859,7 +796,7 @@ class File {
     can (mode) {
         var acc = this.access();
 
-        return acc ? acc[mode] : false;
+        return acc[mode];
     }
 
     /**
@@ -868,7 +805,7 @@ class File {
      */
     exists () {
         var st = this.stat();
-        return st !== null;
+        return !st.error;
     }
 
     /**
@@ -905,12 +842,12 @@ class File {
 
     /**
      * Returns `true` if this file is a hidden file.
-     * @param {Boolean} [strict] Pass `true` to match native Explorer/Finder meaning
+     * @param {Boolean} [asNative] Pass `true` to match native Explorer/Finder meaning
      * of hidden state.
      * @return {Boolean}
      */
-    isHidden (strict) {
-        if (!File.Win || !strict) {
+    isHidden (asNative) {
+        if (!File.Win || !asNative) {
             let name = this.name || '';
 
             if (name[0] === '.') {
@@ -921,9 +858,7 @@ class File {
         if (File.Win) {
             var st = this.stat();
 
-            if (st.attribs && st.attribs.indexOf('H') > -1) {
-                return true;
-            }
+            return st.attrib.H; // if we got an error, H will be false
         }
 
         return false;
@@ -963,6 +898,9 @@ class File {
      *          // file exists...
      *      }
      *
+     * If the file does not exist, or some other error is encountered determining the
+     * stats, the `error` property is set accordingly.
+     *
      * The stat object is cached on this instance. Use `restat` to ensure a fresh stat
      * from the file-system. This cached stat object is shared with `asyncStat()` and
      * `asyncRestat()` methods. The `statLink()` family uses a separately cached object.
@@ -976,13 +914,15 @@ class File {
             let path = this.fspath;
 
             try {
-                this._stat = st = Fs.statSync(path);
+                st = Fs.statSync(path);
 
-                st.attribs = File.Win ? Win.attrib(path) : '';
+                st.attrib = File.Win ? Win.attrib(path) : Attribute.NULL;
             }
             catch (e) {
-                // ignore
+                st = Stat.getError(e);
             }
+
+            this._stat = st;
         }
 
         return st;
@@ -991,6 +931,9 @@ class File {
     /**
      * Return the `[fs.Stats](https://nodejs.org/api/fs.html#fs_class_fs_stats)` for a
      * (potentially) symbolic link.
+     *
+     * If the file does not exist, or some other error is encountered determining the
+     * stats, the `error` property is set accordingly.
      *
      * The stat object is cached on this instance. Use `restatLink` to ensure a fresh stat
      * from the file-system. This cached stat object is shared with `asyncStatLink()` and
@@ -1005,13 +948,15 @@ class File {
             let path = this.fspath;
 
             try {
-                this._lstat = st = Fs.lstatSync(path);
+                st = Fs.lstatSync(path);
 
-                st.attribs = File.Win ? Win.attrib(path) : '';
+                st.attrib = File.Win ? Win.attrib(path) : Attribute.NULL;
             }
             catch (e) {
-                // ignore
+                st = Stat.getError(e);
             }
+
+            this._lstat = st;
         }
 
         return st;
@@ -1153,15 +1098,19 @@ class File {
     // File system checks (async)
 
     /**
-     * Returns a `FileAccess` object describing the access available for this file. If the
-     * file does not exist, `null` is returned.
+     * Returns a `File.Access` object describing the access available for this file. If
+     * the file does not exist, or some other error is encountered, the `error` property
+     * is set accordingly.
      *
      *      File.from(s).asyncAccess().then(acc => {
-     *          if (!acc) {
+     *          if (acc.rw) {
+     *              // file at location s has R and W permission
+     *          }
+     *          else if (acc.error === 'ENOENT') {
      *              // no file ...
      *          }
-     *          else if (acc.rw) {
-     *              // file at location s has R and W permission
+     *          else if (acc.error) {
+     *              // some other error
      *          }
      *      });
      *
@@ -1177,39 +1126,34 @@ class File {
      */
     asyncAccess () {
         return this.asyncStat().then(st => {
-            if (st === null) {
-                return null;
+            if (st.error) {
+                return Access.getError(st.error);
             }
 
-            let mask = st.mode & File.RWX.mask;
-            return ACCESS[mask];
+            return Access[st.mode & Access.rwx.mask];
         });
     }
 
     asyncCan (mode) {
         return this.asyncAccess().then(acc => {
-            if (acc === null) {
-                return false;
-            }
-
-            return acc[mode] || false;
+            return acc[mode];
         });
     }
 
     asyncExists () {
         return this.asyncStat().then(st => {
-            return st !== null;
+            return !st.error;
         });
     }
 
     /**
      * Returns a Promise that resolves to `true` if this file is a hidden file.
-     * @param {Boolean} [strict] Pass `true` to match native Explorer/Finder meaning
+     * @param {Boolean} [asNative] Pass `true` to match native Explorer/Finder meaning
      * of hidden state.
      * @return {Promise<Boolean>}
      */
-    asyncIsHidden (strict) {
-        if (!File.Win || !strict) {
+    asyncIsHidden (asNative) {
+        if (!File.Win || !asNative) {
             let name = this.name || '';
 
             if (name[0] === '.') {
@@ -1219,7 +1163,7 @@ class File {
 
         if (File.Win) {
             return this.asyncStat().then(st => {
-                return st.attribs ? st.attribs.indexOf('H') > -1 : false;
+                return st.attrib.H;  // if we got an error, H will be false
             });
         }
 
@@ -1254,8 +1198,11 @@ class File {
     /**
      * Return the `[fs.Stats](https://nodejs.org/api/fs.html#fs_class_fs_stats)`.
      *
+     * If the file does not exist, or some other error is encountered determining the
+     * stats, the `error` property is set accordingly.
+     *
      *      File.from(s).asyncStat().then(st => {
-     *          if (st) {
+     *          if (!st.error) {
      *              // file exists...
      *          }
      *      });
@@ -1277,15 +1224,15 @@ class File {
             return new Promise(resolve => {
                 Fs.stat(path, (err, st) => {
                     if (err) {
-                        resolve(null);
+                        resolve(Stat.getError(err));
                     }
                     else {
-                        st.attribs = '';
+                        st.attrib = Attribute.NULL;
                         this._stat = st;
 
                         if (File.Win) {
                             Win.asyncAttrib(path).then(attr => {
-                                    st.attribs = attr;
+                                    st.attrib = attr;
                                     resolve(st);
                                 },
                                 e => {
@@ -1305,8 +1252,11 @@ class File {
      * Return the `[fs.Stats](https://nodejs.org/api/fs.html#fs_class_fs_stats)` for a
      * (potentially) symbolic link.
      *
+     * If the file does not exist, or some other error is encountered determining the
+     * stats, the `error` property is set accordingly.
+     *
      *      File.from(s).asyncStatLink().then(st => {
-     *          if (st) {
+     *          if (!st.error) {
      *              // file exists...
      *          }
      *      });
@@ -1328,15 +1278,15 @@ class File {
             return new Promise(resolve => {
                 Fs.lstat(path, (err, st) => {
                     if (err) {
-                        resolve(null);
+                        resolve(Stat.getError(err));
                     }
                     else {
-                        st.attribs = '';
+                        st.attrib = Attribute.NULL;
                         this._lstat = st;
 
                         if (File.Win) {
                             Win.asyncAttrib(path).then(attr => {
-                                    st.attribs = attr;
+                                    st.attrib = attr;
                                     resolve(st);
                                 },
                                 e => {
@@ -1355,61 +1305,12 @@ class File {
     //-----------------------------------------------------------------
     // Directory Operations
 
-    static _parseListMode (mode) {
-        if (mode && mode.constructor === Object) {
-            return mode;
-        }
-
-        var options = File._parseMode({
-            A: false,
-            d: false,
-            f: false,
-            l: false,
-            o: true,
-            s: false,
-            w: false,
-            T: false
-        }, mode);
-
-        options.hideDots = File.Win ? !options.w : true;
-        options.cachify = options.l || options.s;
-        options.statify = options.s || options.f || options.d;
-
-        return options;
-    }
-
-    static _parseMode (flags, mode) {
-        let enable = null;
-
-        for (let i = 0, n = mode && mode.length; i < n; ++i) {
-            let c = mode[i];
-
-            if (c === '-' || c === '+') {
-                if (enable === null) {
-                    enable = c === '+';
-                }
-                else {
-                    throw new Error(`Invalid mode modifier "${mode.substr(i-1)}"`);
-                }
-            }
-            else if (!(c in flags)) {
-                throw new Error(`Invalid mode flag "${c}"`);
-            }
-            else {
-                flags[c] = enable !== false;
-                enable = null;
-            }
-        }
-
-        return flags;
-    }
-
     asyncList (mode) {
-        var options = File._parseListMode(mode);
+        var listMode = ListMode.get(mode);
 
         return new Promise((resolve, reject) => {
             var fail = e => {
-                if (options.T) {
+                if (listMode.T) {
                     if (reject) {
                         reject(e);
                     }
@@ -1428,34 +1329,26 @@ class File {
 
                 reject = null;
 
-                if (options.f) {
-                    result = result.filter(f => !f._stat.isDirectory());
+                let statType = listMode.l ? '_lstat' : '_stat';
+
+                if (listMode.f) {
+                    result = result.filter(f => !f[statType].isDirectory());
                 }
-                else if (options.d) {
-                    result = result.filter(f => f._stat.isDirectory());
+                else if (listMode.d) {
+                    result = result.filter(f => f[statType].isDirectory());
                 }
 
-                if (!options.A) {
+                if (!listMode.A) {
                     result = result.filter(f => {
-                        let name = f.name;
-
-                        if (options.hideDots && name[0] === '.') {
+                        if (listMode.hideDots && f.name[0] === '.') {
                             return false;
                         }
 
-                        let attrib = f._stat.attribs || '';
-
-                        return attrib.indexOf('H') < 0;
+                        return !f[statType].attrib.H;
                     });
                 }
 
-                if (!options.cachify) {
-                    result.forEach(f => {
-                        f._stat = null;
-                    });
-                }
-
-                if (options.o) {
+                if (listMode.o) {
                     result.sort(File.sorter);
                 }
 
@@ -1467,7 +1360,7 @@ class File {
 
             Fs.readdir(this.fspath, (err, names) => {
                 if (err) {
-                    if (options.T) {
+                    if (listMode.T) {
                         reject(err);
                     }
                     else {
@@ -1481,19 +1374,17 @@ class File {
                 //TODO split stat / lstat up
                 names.forEach(name => {
                     let f = new File(this, name);
+
                     f._parent = this;
 
                     result.push(f);
 
-                    if (options.l) {
-                        promises.push(f.asyncStatLink().then(st => {
-                            f._stat = st;
-                        }));
+                    // The user may have asked to cache both types of stats...
+                    if (listMode.l) {
+                        promises.push(f.asyncStatLink());
                     }
-                    else if (options.statify) {
-                        promises.push(f.asyncStat().then(st => {
-                            f._stat = st;
-                        }));
+                    if (listMode.s) {
+                        promises.push(f.asyncStat());
                     }
                 });
 
@@ -1571,11 +1462,11 @@ class File {
      * @return {File[]}
      */
     list (mode) {
-        var options = File._parseListMode(mode);
+        var listMode = ListMode.get(mode);
         var ret = [];
         var names;
 
-        if (options.T) {
+        if (listMode.T) {
             names = Fs.readdirSync(this.fspath);
         }
         else {
@@ -1590,40 +1481,37 @@ class File {
         for (let i = 0, n = names.length; i < n; ++i) {
             let name = names[i];
 
-            if (!options.A && options.hideDots && name[0] === '.') {
+            if (!listMode.A && listMode.hideDots && name[0] === '.') {
                 continue;
             }
 
             let f = new File(this, name);
             f._parent = this;
 
-            //TODO split stat / lstat up
-            let st = options.l ? f.statLink() : (options.statify ? f.stat() : null);
+            let st = listMode.l ? f.statLink() : (listMode.s ? f.stat() : null);
 
-            if (st) {
-                if (!options.A && st.attribs && st.attribs.indexOf('H') > -1) {
+            if (listMode.l && listMode.s) {
+                f.stat(); // cache these but use statLink() result
+            }
+
+            if (!listMode.A && !st.attrib.H) {
+                continue;
+            }
+            if (listMode.f) {
+                if (st.isDirectory()) {
                     continue;
                 }
-                if (options.f) {
-                    if (st.isDirectory()) {
-                        continue;
-                    }
-                }
-                if (options.d) {
-                    if (!st.isDirectory()) {
-                        continue;
-                    }
-                }
-
-                if (options.cachify) {
-                    f._stat = st;
+            }
+            if (listMode.d) {
+                if (!st.isDirectory()) {
+                    continue;
                 }
             }
 
             ret.push(f);
         }
 
-        if (options.o) {
+        if (listMode.o) {
             ret.sort(File.sorter);
         }
 
@@ -1982,7 +1870,6 @@ const proto = File.prototype;
 
 Object.assign(proto, {
     $isFile: true,
-    _re: re,
     _stat: null,
 
     _extent: undefined,
@@ -1992,11 +1879,531 @@ Object.assign(proto, {
 
 File.WIN = isWin;
 File.MAC = isMac;
-File.CASE = !isWin && !isMac;
+File.NOCASE = isWin || isMac;
 
 File.isDirectory = File.isDir;
 File.re = re;
 File.separator = Path.sep;
+
+File.profilers = {
+    default (home, company) {
+        return home.join(`.${company.toLowerCase()}`);
+    },
+
+    darwin (home, company) {
+        return home.join(`Library/Application Support/${company}`);
+    },
+
+    linux (home, company) {
+        return home.join(`.local/share/data/${company.toLowerCase()}`);
+    },
+
+    win32 (home, company) {
+        return File.join(process.env.APPDATA || process.env.LOCALAPPDATA ||
+                         home.join('AppData\\Roaming'), `${company}`);
+
+    }
+};
+
+//--------------------
+
+const _statModes = {
+    l: {
+        asyncStat: 'asyncStatLink',
+        stat: 'statLink'
+    },
+    '': {
+        asyncStat: 'asyncStat',
+        stat: 'stat'
+    }
+};
+
+function addTypeTest (name, statModes) {
+    proto['async' + name[0].toUpperCase() + name.substr(1)] = function (mode) {
+        let fn = statModes[mode || ''];
+        return this[fn.asyncStat]().then(stat => {
+            return !stat.error && stat[name]();
+        });
+    };
+
+    return proto[name] = function (mode) {
+        let fn = statModes[mode || ''];
+        let stat = this[fn.stat]();
+
+        return !stat.error && stat[name]();
+    };
+}
+
+addTypeTest('isSymbolicLink', { l: _statModes.l, '': _statModes.l });
+
+/**
+ * This method will potentially use cached stats (of the specified type) for the file.
+ * If this is not desired, use `stat().isBlockDevice()` instead.
+ * @method isBlockDevice
+ * @param {"l"} [mode=null] An optional mode setting for the type of stats to use for
+ * the determination. By default `stat()` is used. Pass `'l'` (lowercase-L) to enable
+ * `statLink()` mode.
+ * @return {Boolean}
+ */
+/**
+ * This is the asynchronous equivalent of `isBlockDevice()`.
+ * @method asyncIsBlockDevice
+ * @param {"l"} [mode=null] An optional mode setting for the type of stats to use for
+ * the determination. By default `stat()` is used. Pass `'l'` (lowercase-L) to enable
+ * `statLink()` mode.
+ * @return {Promise<Boolean>}
+ */
+/**
+ * This method will potentially use cached stats (of the specified type) for the file.
+ * If this is not desired, use `stat().isCharacterDevice()` instead.
+ * @method isCharacterDevice
+ * @param {"l"} [mode=null] An optional mode setting for the type of stats to use for
+ * the determination. By default `stat()` is used. Pass `'l'` (lowercase-L) to enable
+ * `statLink()` mode.
+ * @return {Boolean}
+ */
+/**
+ * This is the asynchronous equivalent of `isCharacterDevice()`.
+ * @method asyncIsCharacterDevice
+ * @param {"l"} [mode=null] An optional mode setting for the type of stats to use for
+ * the determination. By default `stat()` is used. Pass `'l'` (lowercase-L) to enable
+ * `statLink()` mode.
+ * @return {Promise<Boolean>}
+ */
+/**
+ * This method will potentially use cached stats (of the specified type) for the file.
+ * If this is not desired, use `stat().isDirectory()` instead.
+ * @method isDirectory
+ * @param {"l"} [mode=null] An optional mode setting for the type of stats to use for
+ * the determination. By default `stat()` is used. Pass `'l'` (lowercase-L) to enable
+ * `statLink()` mode.
+ * @return {Boolean}
+ */
+/**
+ * This is the asynchronous equivalent of `isDirectory()`.
+ * @method asyncIsDirectory
+ * @param {"l"} [mode=null] An optional mode setting for the type of stats to use for
+ * the determination. By default `stat()` is used. Pass `'l'` (lowercase-L) to enable
+ * `statLink()` mode.
+ * @return {Promise<Boolean>}
+ */
+/**
+ * This method will potentially use cached stats (of the specified type) for the file.
+ * If this is not desired, use `stat().isFile()` instead.
+ * @method isFile
+ * @param {"l"} [mode=null] An optional mode setting for the type of stats to use for
+ * the determination. By default `stat()` is used. Pass `'l'` (lowercase-L) to enable
+ * `statLink()` mode.
+ * @return {Boolean}
+ */
+/**
+ * This is the asynchronous equivalent of `isFile()`.
+ * @method asyncIsFile
+ * @param {"l"} [mode=null] An optional mode setting for the type of stats to use for
+ * the determination. By default `stat()` is used. Pass `'l'` (lowercase-L) to enable
+ * `statLink()` mode.
+ * @return {Promise<Boolean>}
+ */
+/**
+ * This method will potentially use cached stats (of the specified type) for the file.
+ * If this is not desired, use `stat().isFIFO()` instead.
+ * @method isFIFO
+ * @param {"l"} [mode=null] An optional mode setting for the type of stats to use for
+ * the determination. By default `stat()` is used. Pass `'l'` (lowercase-L) to enable
+ * `statLink()` mode.
+ * @return {Boolean}
+ */
+/**
+ * This is the asynchronous equivalent of `isFIFO()`.
+ * @method asyncIsFIFO
+ * @param {"l"} [mode=null] An optional mode setting for the type of stats to use for
+ * the determination. By default `stat()` is used. Pass `'l'` (lowercase-L) to enable
+ * `statLink()` mode.
+ * @return {Promise<Boolean>}
+ */
+/**
+ * This method will potentially use cached stats (of the specified type) for the file.
+ * If this is not desired, use `stat().isSocket()` instead.
+ * @method isSocket
+ * @param {"l"} [mode=null] An optional mode setting for the type of stats to use for
+ * the determination. By default `stat()` is used. Pass `'l'` (lowercase-L) to enable
+ * `statLink()` mode.
+ * @return {Boolean}
+ */
+/**
+ * This is the asynchronous equivalent of `isSocket()`.
+ * @method asyncIsSocket
+ * @param {"l"} [mode=null] An optional mode setting for the type of stats to use for
+ * the determination. By default `stat()` is used. Pass `'l'` (lowercase-L) to enable
+ * `statLink()` mode.
+ * @return {Promise<Boolean>}
+ */
+[
+    'isBlockDevice', 'isCharacterDevice', 'isDirectory', 'isFile', 'isFIFO', 'isSocket'
+].forEach(fn => addTypeTest(fn, _statModes));
+
+proto.isDir = proto.isDirectory;
+proto.asyncIsDir = proto.asyncIsDirectory;
+proto.isSymLink = proto.isSymbolicLink;
+proto.asyncIsSymLink = proto.asyncIsSymbolicLink;
+
+//--------------------
+
+/**
+ * @class File.Access
+ * This class contains useful boolean properties that categories file access. This makes
+ * for shorter code then use of `fs.constants.R_OK` and related masks.
+ *
+ *      // path is a string path
+ *
+ *      let mode = fs.statSync(path).mode;
+ *
+ *      if (mode & fs.constants.R_OK && mode & fs.constants.W_OK) {
+ *          // path is R and W
+ *      }
+ *      // else path is missing R and/or W
+ *
+ *      // or
+ *
+ *      try {
+ *          fs.accessSync(path, fs.constants.R_OK | fs.constants.W_OK);
+ *
+ *          // path is R and W
+ *      }
+ *      catch (e) {
+ *          // path is missing R and/or W
+ *      }
+ *
+ * Or using `File`:
+ *
+ *      if (file.access().rw) {
+ *          // file exists and has R and W access
+ *      }
+ *
+ * NOTE: Instances of this class are created automatically and not be user code.
+ */
+class Access {
+    static getError (error) {
+        return Access[error] || new Access('', error);
+    }
+
+    constructor (name, error) {
+        /**
+         * @property {Boolean} r
+         * @readonly
+         * This property is `true` if the file can be read.
+         */
+        this.r = name.indexOf('r') > -1;
+
+        /**
+         * @property {Boolean} w
+         * @readonly
+         * This property is `true` if the file can be written.
+         */
+        this.w = name.indexOf('w') > -1;
+
+        /**
+         * @property {Boolean} x
+         * @readonly
+         * This property is `true` if the file can be executed.
+         */
+        this.x = name.indexOf('x') > -1;
+
+        /**
+         * @property {Boolean} rw
+         * @readonly
+         * This property is `true` if the file can be read and written.
+         */
+        this.rw = this.r && this.w;
+
+        /**
+         * @property {Boolean} rx
+         * @readonly
+         * This property is `true` if the file can be read and executed.
+         */
+        this.rx = this.r && this.x;
+
+        /**
+         * @property {Boolean} wx
+         * @readonly
+         * This property is `true` if the file can be written and executed.
+         */
+        this.wx = this.w && this.x;
+
+        /**
+         * @property {Boolean} rwx
+         * @readonly
+         * This property is `true` if the file can be read, written and executed.
+         */
+        this.rwx = this.r && this.w && this.x;
+
+        /**
+         * @property {String} error
+         * @readonly
+         * The error encountered determining the file's access. This is `null` if the
+         * file's access was determined.
+         */
+        this.error = error || null;
+
+        /**
+         * @property {Number} mask
+         * @readonly
+         * This property holds the bit-wise OR of the available access modes
+         * `fs.constants.R_OK`, `fs.constants.W_OK` and/or  `fs.constants.X_OK`.
+         */
+        this.mask = (this.r ? Fs.constants.R_OK : 0) |
+                    (this.w ? Fs.constants.W_OK : 0) |
+                    (this.x ? Fs.constants.X_OK : 0);
+
+        /**
+         * @property {"r"/"rw"/"rwx"/"w"/"wx"/"x"} name
+         * @readonly
+         * This string holds the available access modes as lowercase single letters.
+         */
+        this.name = name;
+
+        /**
+         * @property {"R"/"RW"/"RWX"/"W"/"WX"/"X"} nameUpper
+         * @readonly
+         * This string holds the available access modes as uppercase single letters.
+         */
+        this.nameUpper = name.toUpperCase();
+
+        if (error) {
+            Access[error] = this;
+        }
+        else if (name) {
+            Access[name] = Access[this.mask] = Access[this.nameUpper] = this;
+        }
+
+        Object.freeze(this);
+    }
+}
+
+File.Access = Access;
+
+Access.NULL = Access['0'] = new Access('');
+
+new Access('r');
+new Access('w');
+new Access('x');
+new Access('rw');
+new Access('rx');
+new Access('wx');
+new Access('rwx');
+
+//--------------------
+
+class Attribute {
+    static get (attr) {
+        let all = Attribute.all;
+        let attrMap = Attribute.map;
+        let cache = Attribute.cache;
+        let mask = 0;
+        let c, i, ret, text;
+
+        if (typeof attr === 'string') {
+            if (!(ret = (cache[attr] || cache[attr.toLowerCase()]))) {
+                text = attr;
+
+                // Turn string into a bitmask ('HCA' === 16+2+1 === 19)
+                for (i = 0; i < attr.length; ++i) {
+                    c = attr[i];
+
+                    if (!attrMap[c]) {
+                        throw new Error(`Invalid attribute code "${c}"`);
+                    }
+
+                    mask |= attrMap[c];
+                }
+            }
+        }
+        else {
+            // Convert fswin attribute object to a mask
+            for (i = all.length; i-- > 0; ) {
+                if (attr[all[i][0]]) {
+                    mask |= 1 << i;
+                }
+            }
+        }
+
+        if (!ret && !(ret = cache[mask])) {
+            ret = new Attribute(mask);
+
+            if (text) {
+                // user may have passed out-of-order string, so store the attrib
+                // by that key as well
+                cache[text] = ret;
+            }
+        }
+
+        return ret;
+    }
+
+    constructor (mask) {
+        let all = Attribute.all,
+            cache = Attribute.cache,
+            text = '',
+            c, i;
+
+        // Build the text in canonical order while we set the appropriate flags:
+        for (i = 0; i < all.length; ++i) {
+            c = all[i][1];
+
+            if (mask & (1 << i)) {
+                text += c;
+                this[c] = true;
+            } else {
+                this[c] = false;
+            }
+        }
+
+        this.text = text;
+        this.textLower = text.toLowerCase();
+
+        cache[text] = cache[this.textLower] = cache[mask] = this;
+    }
+}
+
+File.Attribute = Attribute;
+
+Attribute.cache = {};
+Attribute.map = {};
+
+Attribute.all = [
+    //IS_DEVICE
+    //IS_DIRECTORY
+    //IS_NOT_CONTENT_INDEXED
+    //IS_SPARSE_FILE
+    //IS_TEMPORARY
+    //IS_INTEGRITY_STREAM
+    //IS_NO_SCRUB_DATA
+    //IS_REPARSE_POINT
+
+    [ 'IS_ARCHIVED',    'A' ], // 1
+    [ 'IS_COMPRESSED',  'C' ], // 2
+    [ 'IS_ENCRYPTED',   'E' ], // 4
+    [ 'IS_HIDDEN',      'H' ], // 8
+    [ 'IS_OFFLINE',     'O' ], // 16
+    [ 'IS_READ_ONLY',   'R' ], // 32
+    [ 'IS_SYSTEM',      'S' ]  // 64
+];
+
+Attribute.NULL = Attribute.cache.null = new Attribute(0);
+
+Attribute.all.forEach((pair, index) => {
+    let c = pair[1];
+    let b = 1 << index;
+
+    Attribute.map[c] = b;
+    Attribute.map[b] = c;
+});
+
+//--------------------
+
+class ListMode {
+    static get (mode) {
+        if (mode.isListMode) {
+            return mode;
+        }
+
+        let cache = ListMode.cache;
+        let ret = cache[mode];
+
+        if (!ret) {
+            cache[mode] = ret = new ListMode(mode);
+            Object.freeze(ret);
+        }
+
+        return ret;
+    }
+
+    constructor (mode) {
+        let defaults = ListMode.defaults;
+        let enable = null;
+
+        Object.assign(this, defaults);
+
+        for (let i = 0, n = mode && mode.length; i < n; ++i) {
+            let c = mode[i];
+
+            if (c === '-' || c === '+') {
+                if (enable === null) {
+                    enable = c === '+';
+                }
+                else {
+                    throw new Error(`Invalid mode modifier "${mode.substr(i-1)}"`);
+                }
+            }
+            else if (!(c in defaults)) {
+                throw new Error(`Invalid mode flag "${c}"`);
+            }
+            else {
+                this[c] = enable !== false;
+                enable = null;
+            }
+        }
+
+        // If we aren't going with 'l' but we are going to need stats, set 's'
+        if (!this.l && (this.f || this.d || !this.A)) {
+            this.s = true;
+        }
+
+        // showDots on Windows when options.w is true:
+        this.hideDots = !(File.Win && this.w); // = !showDots
+    }
+}
+
+ListMode.cache = {};
+ListMode.defaults = {
+    A: false,
+    d: false,
+    f: false,
+    l: false,
+    o: true,
+    s: false,
+    w: false,
+    T: false
+};
+
+ListMode.prototype.isListMode = true;
+
+File.ListMode = ListMode;
+
+//--------------------
+
+const zeroDate = new Date();
+zeroDate.setTime(0);
+
+Object.freeze(zeroDate);
+
+// mimics an fs.Stats instance:
+class Stat {
+    static getError (error) {
+        let code = error.code || error;
+        let ret = Stat[code];
+
+        if (!ret) {
+            ret = new Stat(code);
+        }
+
+        return ret;
+    }
+
+    constructor (error) {
+        this.error = error;
+
+        this.birthtime = this.atime = this.mtime = this.ctime = zeroDate;
+        this.size = 0;
+        this.attrib = Attribute.NULL;
+
+        Stat[error] = this;
+
+        Object.freeze(this);
+    }
+}
+
+File.Stat = Stat;
 
 //------------------------------------------------------------------------
 
@@ -2013,7 +2420,7 @@ class Walker {
 
         this.before = before;
         this.after = after;
-        this.listMode = File._parseListMode('s' + (mode || ''));
+        this.listMode = ListMode.get('s' + (mode || ''));
 
         /**
          * @property {File} at
@@ -2409,188 +2816,41 @@ File.writers.json5 = File.writers.json.extend({
     File.writers[ext] = File.writers.text.extend();
 });
 
-//------------------------------------------------------------------------------
-
-File.profilers = {
-    default (home, company) {
-        return home.join(`.${company.toLowerCase()}`);
-    },
-
-    darwin (home, company) {
-        return home.join(`Library/Application Support/${company}`);
-    },
-
-    linux (home, company) {
-        return home.join(`.local/share/data/${company.toLowerCase()}`);
-    },
-
-    win32 (home, company) {
-        return File.join(process.env.APPDATA || process.env.LOCALAPPDATA ||
-                         home.join('AppData\\Roaming'), `${company}`);
-
-    }
-};
-
-//--------------------
-
-const ACCESS = File.ACCESS = {
-    rwx: {
-        name: 'rwx',
-
-        r: true,
-        w: true,
-        x: true,
-
-        rw: true,
-        rx: true,
-        wx: true,
-
-        rwx: true,
-
-        mask: Fs.constants.R_OK | Fs.constants.W_OK | Fs.constants.X_OK
-    }
-};
-
-ACCESS[ACCESS.rwx.mask] = ACCESS.RWX = File.RWX = ACCESS.rwx;
-
-[Fs.constants.R_OK, Fs.constants.W_OK, Fs.constants.X_OK].forEach((mask, index, array) => {
-    let c = 'rwx'[index];
-    let obj = ACCESS[c] = ACCESS[c.toUpperCase()] = File[c.toUpperCase()] = {
-        name: c,
-
-        r: c === 'r',
-        w: c === 'w',
-        x: c === 'x',
-
-        rw: false,
-        rx: false,
-        wx: false,
-
-        rwx: false,
-
-        mask: mask
-    };
-
-    ACCESS[obj.mask] = obj;
-    Object.freeze(obj);
-
-    for (let i = index + 1; i < array.length; ++i) {
-        let c2 = 'rwx'[i];
-        let key = c + c2; // rw, rx and wx
-        let KEY = key.toUpperCase();
-        let obj2 = ACCESS[key] = ACCESS[KEY] = File[KEY] = Object.assign({}, obj);
-
-        obj2[c2] = obj2[key] = true;
-        obj2.name = key;
-        obj2.mask |= array[i];
-
-        ACCESS[obj2.mask] = obj2;
-
-        Object.freeze(obj2);
-    }
-});
-
-Object.freeze(ACCESS.rwx);
-Object.freeze(ACCESS);
-
-//--------------------
-
-const linky = {
-    asyncStat: 'asyncStatLink',
-    stat: 'statLink'
-};
-
-const normal = {
-    asyncStat: 'asyncStat',
-    stat: 'stat'
-};
-
-function addTypeTest (name, normal, link) {
-    proto['async' + name[0].toUpperCase() + name.substr(1)] = function () {
-        return this[statMethodAsync]().then(stat => {
-            return (stat ? stat[name]() : false);
-        });
-    };
-
-    return proto[name] = function () {
-        let stat = this[statMethod]();
-
-        return (stat ? stat[name]() : false);
-    };
-}
-
-addTypeTest('isSymbolicLink', 'statLink', 'asyncStatLink');
-
-[
-    'isBlockDevice', 'isCharacterDevice', 'isDirectory', 'isFile', 'isFIFO',
-    'isSocket'
-].forEach(fn => addTypeTest(fn));
-
-proto.isDir = proto.isDirectory;
-proto.asyncIsDir = proto.asyncIsDirectory;
-proto.isSymLink = proto.isSymbolicLink;
-proto.asyncIsSymLink = proto.asyncIsSymbolicLink;
-
-//------------------------------------------------------------
+//-----------------------------------------------------------------------------
 
 class Win {
     static asyncAttrib (path) {
-        return new Promise((resolve, reject) => {
+        return new Promise(resolve => {
             var process = results => {
                 if (results) {
-                    resolve(Win.convertAttr(results));
+                    resolve(Attribute.get(results));
                 }
                 else {
-                    reject(new Error(`Cannot get attributes for ${path}`));
+                    //reject(new Error(`Cannot get attributes for ${path}`));
+                    resolve(Attribute.NULL);
                 }
             };
 
             if (!fswin.getAttributes(path, process)) {
-                reject(new Error(`Cannot get attributes for ${path}`));
+                //reject(new Error(`Cannot get attributes for ${path}`));
+                resolve(Attribute.NULL);
             }
         })
     }
 
     static attrib (path) {
-        var attr = fswin.getAttributesSync(path);
-        return Win.convertAttr(attr);
-    }
-
-    static convertAttr (attr) {
-        var ret = '';
-
-        for (let i = 0, n = Win.attributes.length; i < n; ++i) {
-            let a = Win.attributes[i];
-            if (attr[a[0]]) {
-                ret += a[1];
-            }
+        try {
+            var attr = fswin.getAttributesSync(path);
+            return Attribute.get(attr);
         }
-
-        return ret;
+        catch (e) {
+            return Attribute.NULL;
+        }
     }
 }
 
-Win.attributes = [
-    //IS_DEVICE
-    //IS_NOT_CONTENT_INDEXED
-    //IS_SPARSE_FILE
-    //IS_TEMPORARY
-    //IS_INTEGRITY_STREAM
-    //IS_NO_SCRUB_DATA
-    //IS_REPARSE_POINT
-
-    [ 'IS_ARCHIVED',    'A' ],
-    [ 'IS_COMPRESSED',  'C' ],
-    [ 'IS_DIRECTORY',   'D' ],
-    [ 'IS_ENCRYPTED',   'E' ],
-    [ 'IS_HIDDEN',      'H' ],
-    [ 'IS_OFFLINE',     'O' ],
-    [ 'IS_READ_ONLY',   'R' ],
-    [ 'IS_SYSTEM',      'S' ]
-];
-
 File.Win = isWin && Win;
 
-//------------------------------------------------------------
+//-----------------------------------------------------------------------------
 
 module.exports = File;
