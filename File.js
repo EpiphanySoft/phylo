@@ -2319,36 +2319,65 @@ Attribute.all.forEach((pair, index) => {
 /**
  * @class File.Globber
  *
+ * This class converts "globs" (file-system wildcard expressions like "*.txt") into
+ * equivalent `RegExp` instances. Normally, instances are created by `File.glob()`
+ * method:
+ *
+ *      // Basic mode:
+ *      var txtRe = File.glob('*.txt');
+ *
+ *      // Extended mode:
+ *      var wwwJsOrHtml = File.glob('* /www/{*.js,*.html}', 'E');
+ *
+ *      // With paths:
+ *      var allTxtRe = File.glob('** /*.txt');
+ *
+ *      // Simple wildcards:
+ *      var allTxtRe = File.glob('* /*.txt', 'S');
+ *
  * ## Extended Mode ('E')
  * Whether we are matching so called "extended" globs (like bash) and should support
  * single character matching, matching ranges of characters, group matching, etc.
  *
- * ## Singular Wildcards ('S')
- // When globstar is _false_ (default), '/foo/*' is translated a regexp like
- // '^\/foo\/.*$' which will match any string beginning with '/foo/'
- // When globstar is _true_, '/foo/*' is translated to regexp like
- // '^\/foo\/[^/]*$' which will match any string beginning with '/foo/' BUT
- // which does not have a '/' to the right of it.
- // E.g. with '/foo/*' these will match: '/foo/bar', '/foo/bar.txt' but
- // these will not '/foo/bar/baz', '/foo/bar/baz.txt'
- // Lastly, when globstar is _true_, '/foo/**' is equivalent to '/foo/*' when
- // globstar is _false_
+ * ## Simple Wildcards ('S')
+ *
+ * When `simple` is _true_ , `'/foo/*'` is translated to a `RegExp` like `'^\/foo\/.*$'`
+ * which will match any string beginning with `'/foo/'`.
+ *
+ * When `simple` is _false_ (the default), `'/foo/*'` is translated to a `RegExp` like
+ * `'^\/foo\/[^/]*$'` which will match any string beginning with `'/foo/'` BUT which does
+ * not have a '/' to the right of it.
+ *
+ * For example,  with `'/foo/*'` these will match: `'/foo/bar'`, `'/foo/bar.txt'` but
+ * these will not `'/foo/bar/baz'`, `'/foo/bar/baz.txt'`.
+ *
+ * Lastly, when `simple` is _false_, `'/foo/**'` is equivalent to `'/foo/*'` with
+ * `simple` set to _true_.
+ *
+ * *NOTE*: This is shamelessly borrowed from: [glob-to-regexp](https://www.npmjs.com/package/glob-to-regexp)
+ * but adjusted for better support for Windows paths.
  */
 class Globber {
     static get (options) {
         let cache = Globber.cache;
-        let go = cache[options];
+        let ret = cache[options];
 
-        if (!go) {
-            cache[options] = new Globber(options);
+        if (!ret) {
+            cache[options] = ret = new Globber(options);
+            Object.freeze(ret);
         }
+
+        return ret;
     }
 
+    /**
+     * Accepts a string of `Globber` options ("E" and "S") and `RegExp` flags (all other
+     * characters).
+     * @param {String} options
+     */
     constructor (options) {
-        let all = Globber.all;
-
-        this.flags = '';
-        this.global = false;
+        let all = Globber.all,
+            flags = '';
 
         for (let i = 0; i < options.length; ++i) {
             let c = options[i];
@@ -2357,13 +2386,12 @@ class Globber {
                 this[all[c]] = true;
             }
             else {
-                this.flags += c;
-
-                if (c === 'g') {
-                    this.global = true;
-                }
+                flags += c;
             }
         }
+
+        this.flags = flags;
+        this.global = flags.indexOf('g') > -1;
     }
 
     compile (glob) {
@@ -2427,8 +2455,8 @@ class Globber {
                     }
                     var nextChar = str[i + 1];
 
-                    if (this.singular) {
-                        // singular mode so treat any number of "*" as one
+                    if (this.simple) {
+                        // simple mode so treat any number of "*" as one
                         reStr += ".*";
                     } else {
                         // This is a globstar segment if we have...
@@ -2466,7 +2494,7 @@ class Globber {
 
 Globber.all = {
     E: 'extended',
-    S: 'singular'
+    S: 'simple'
 };
 
 Globber.cache = {};
