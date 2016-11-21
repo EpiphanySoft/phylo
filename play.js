@@ -1,7 +1,15 @@
 'use strict';
 
 const File = require('./File');
+const Globber = File.Globber;
 File.COMPANY = 'Foobar';
+
+var gg = Globber.get('iE');
+console.log(gg);
+
+var re = gg.compile('**/*.txt');
+console.log(re);
+console.log('match:', re.exec('C:\\Program Files/foo.txt'));
 
 var f = File.temp();
 

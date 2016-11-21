@@ -196,18 +196,20 @@ class File {
      *
      * For example:
      *
-     *      glob('*.txt')      ==> /^[^/]
-     *      glob('** /*.txt")  ==>
+     *      glob('*.txt')
+     *      glob('** /*.txt")
      *
+     * See `File.Globber` for more details on `options`.
      *
      * @param {String} pattern The glob pattern to convert.
-     * @param {"e"/"es"/"s"} [options=null] Pass `"e"` to enable "extended" globs like
-     * in Bash. Pass "s" to treat globs more like the shell which matches `"/"` characters
-     * with a `"*"`. By default, only `"**"` matches `"/"`.
-     * @returns {*}
+     * @param {String} [options=null] Pass `"E"` to enable "extended" globs like
+     * in Bash. Pass "S" to treat "*" as simple (shell-like) wildcards. This will which
+     * matches `"/"` characters with a `"*"`. By default, only `"**"` matches `"/"`.
+     * Other options are passed along a `RegExp` flags (e.g., "i" and "g").
+     * @return {RegExp}
      */
     static glob (pattern, options) {
-        return globToRegExp(pattern, globToRegExpOptions[options || '']);
+        return Globber.get(options || '').compile(pattern);
     }
 
     /**
@@ -1464,6 +1466,11 @@ class File {
      *      // lists all files and cache stat info but do not sort:
      *      dir.list('As-o');
      *
+     * You can also pass a 2nd argument to more arbitrarily restrict the matching files:
+     *
+     *      // List non-hidden files with "txt" extension:
+     *      dir.list('', '*.txt');
+     *
      * The valid options are:
      *
      *  - **A** All files are listed, even hidden files. (default is `false`)
@@ -1477,10 +1484,11 @@ class File {
      *   platforms).
      *  - **T** Throw on failure instead of return `null`.
      *
-     * @param {String} mode A string containing the mode characters described above.
+     * @param {String} [mode] A string containing the mode characters described above.
+     * @param {String/RegExp/Function} matcher
      * @return {File[]}
      */
-    list (mode) {
+    list (mode, matcher) {
         var listMode = ListMode.get(mode);
         var ret = [];
         var names;
@@ -1497,6 +1505,7 @@ class File {
             }
         }
 
+        //TODO matcher
         for (let i = 0, n = names.length; i < n; ++i) {
             let name = names[i];
 
@@ -1785,8 +1794,8 @@ class File {
      * @param {File.Walker} after.state The state object tracking the traversal.
      * @param {Promise<Boolean>} after.return Can return a Promise to process before
      * continuing.
-     * @return {Promise<Object>} A promise that resolves to the `state` object after the
-     * traversal is complete.
+     * @return {Promise<File.Walker>} A promise that resolves to the `state` object
+     * once the traversal is complete.
      */
     asyncWalk (mode, before, after) {
         let state = new File.Walker(this, mode, before, after);
@@ -1854,7 +1863,7 @@ class File {
      * descended.
      * @param {File} after.file The file object referencing the current folder to examine.
      * @param {File.Walker} after.state The state object tracking the traversal.
-     * @return {Object} The state object used for the traversal.
+     * @return {File.Walker} The `state` object used for the traversal.
      */
     walk (mode, before, after) {
         let state = new File.Walker(this, mode, before, after);
@@ -2326,33 +2335,41 @@ Attribute.all.forEach((pair, index) => {
  *      // Basic mode:
  *      var txtRe = File.glob('*.txt');
  *
- *      // Extended mode:
- *      var wwwJsOrHtml = File.glob('* /www/{*.js,*.html}', 'E');
+ *      var wwwJsOrHtml = File.glob('* /www/{*.js,*.html}');
  *
  *      // With paths:
  *      var allTxtRe = File.glob('** /*.txt');
  *
- *      // Simple wildcards:
- *      var allTxtRe = File.glob('* /*.txt', 'S');
+ *      // Greedy wildcards and simple globs:
+ *      var allTxtRe = File.glob('* /*.txt', 'GS');
  *
- * ## Extended Mode ('E')
- * Whether we are matching so called "extended" globs (like bash) and should support
- * single character matching, matching ranges of characters, group matching, etc.
+ * ## Case-Sensitivity ("C")
  *
- * ## Simple Wildcards ('S')
+ * By default, the `RegExp` is case-sensitive on platforms where file names are also
+ * case-sensitive, and vise-versa. That means, on Windows and Mac OS X, the `RegExp`
+ * is created with the "i" flag.
  *
- * When `simple` is _true_ , `'/foo/*'` is translated to a `RegExp` like `'^\/foo\/.*$'`
+ * Setting this option means that the "i" flag can be provided manually (or not) by the
+ * caller.
+ *
+ * ## Greedy Wildcards ('G')
+ *
+ * When `deep` is _true_ , `'/foo/*'` is translated to a `RegExp` like `'^\/foo\/.*$'`
  * which will match any string beginning with `'/foo/'`.
  *
- * When `simple` is _false_ (the default), `'/foo/*'` is translated to a `RegExp` like
+ * When `deep` is _false_ (the default), `'/foo/*'` is translated to a `RegExp` like
  * `'^\/foo\/[^/]*$'` which will match any string beginning with `'/foo/'` BUT which does
  * not have a '/' to the right of it.
  *
  * For example,  with `'/foo/*'` these will match: `'/foo/bar'`, `'/foo/bar.txt'` but
  * these will not `'/foo/bar/baz'`, `'/foo/bar/baz.txt'`.
  *
- * Lastly, when `simple` is _false_, `'/foo/**'` is equivalent to `'/foo/*'` with
- * `simple` set to _true_.
+ * Lastly, when `deep` is _false_, `'/foo/**'` is equivalent to `'/foo/*'` with
+ * `deep` set to _true_.
+ *
+ * ## Simple Globs ("S")
+ * To disable matching so called "extended" globs (like bash) and single character
+ * matching, matching ranges of characters, group matching, etc., set the "S" option.
  *
  * *NOTE*: This is shamelessly borrowed from: [glob-to-regexp](https://www.npmjs.com/package/glob-to-regexp)
  * but adjusted for better support for Windows paths.
@@ -2371,8 +2388,8 @@ class Globber {
     }
 
     /**
-     * Accepts a string of `Globber` options ("E" and "S") and `RegExp` flags (all other
-     * characters).
+     * Accepts a string of `Globber` options ("C", "D" and "S") and `RegExp` flags (all
+     * other characters).
      * @param {String} options
      */
     constructor (options) {
@@ -2390,90 +2407,107 @@ class Globber {
             }
         }
 
+        // If the user didn't support 'C' then default in 'i' according to platform:
+        if (!this.cased && File.NOCASE) {
+            flags += 'i';
+        }
+
         this.flags = flags;
         this.global = flags.indexOf('g') > -1;
     }
 
     compile (glob) {
         var str = String(glob);
-        var reStr = "";
-        var extended = this.extended;
         var inGroup = false; // true when in a group (eg {*.html,*.js})
-        var c;
+        var reStr = "";
+        var a, c, prevChar, starCount, nextChar, isGlobstar;
 
         for (var i = 0, len = str.length; i < len; i++) {
             c = str[i];
 
-            switch (c) {
-                case "\\": case "/": case "$": case "^": case "+": case ".":
-                case "(": case ")": case "=": case "!": case "|":
-                    reStr += "\\" + c;
-                    break;
+            if (!this.simple) {
+                a = 0;
 
-                case "?":
-                    if (extended) {
-                        reStr += ".";
+                switch (c) {
+                    case '?':
+                        a = '.';
                         break;
-                    }
-                    // fall
-                case "[": case "]":
-                    if (extended) {
-                        reStr += c;
+
+                    case '[': case ']':
+                        a = c;
                         break;
-                    }
-                    // fall
-                case "{":
-                    if (extended) {
+
+                    case '{':
                         inGroup = true;
-                        reStr += "(";
+                        a = '(';
                         break;
-                    }
-                    // fall
-                case "}":
-                    if (extended) {
+
+                    case '}':
                         inGroup = false;
-                        reStr += ")";
+                        a = ')';
                         break;
-                    }
-                    // fall
-                case ",":
-                    if (inGroup) {
-                        reStr += "|";
-                        break;
-                    }
-                    reStr += "\\" + c;
+                }
+
+                if (a) {
+                    reStr += a;
+                    continue;
+                }
+            }
+
+            switch (c) {
+                case '\\': case '$': case '^': case '+': case '.':
+                case '(': case ')': case '=': case '!': case '|':
+                    reStr += '\\' + c;
                     break;
 
-                case "*":
-                    // Move over all consecutive "*"'s.
+                case '/':
+                    reStr += File.WIN ? '[\\\\/]' : '\\/';
+                    break;
+
+                case ',':
+                    if (inGroup) {
+                        reStr += '|';
+                        break;
+                    }
+                    reStr += '\\' + c;
+                    break;
+
+                case '*':
+                    // Move over all consecutive '*''s.
                     // Also store the previous and next characters
-                    var prevChar = str[i - 1];
-                    var starCount = 1;
-                    while (str[i + 1] === "*") {
+                    prevChar = str[i - 1];
+                    starCount = 1;
+
+                    while (str[i + 1] === '*') {
                         starCount++;
                         i++;
                     }
-                    var nextChar = str[i + 1];
 
-                    if (this.simple) {
-                        // simple mode so treat any number of "*" as one
-                        reStr += ".*";
-                    } else {
+                    nextChar = str[i + 1];
+
+                    if (this.greedy) {
+                        // simple mode so treat any number of '*' as one
+                        reStr += '.*';
+                    }
+                    else {
                         // This is a globstar segment if we have...
-                        // multiple "*"'s
-                        var isGlobstar = starCount > 1
+                        // multiple '*''s
+                        isGlobstar = starCount > 1
                             // from the start of the segment
-                            && (prevChar === "/" || prevChar === undefined)
+                            && (prevChar === '/' || prevChar === undefined)
                             // to the end of the segment
-                            && (nextChar === "/" || nextChar === undefined);
+                            && (nextChar === '/' || nextChar === undefined);
 
                         if (isGlobstar) {
                             // it's a globstar, so match zero or more path segments
-                            reStr += "(?:[^/]*(?:\/|$))*";
-                            i++; // move over the "/"
-                        } else {
+                            reStr += File.WIN ? '(?:[^\\\\/]*(?:[\\\\/]|$))*'
+                                              : '(?:[^/]*(?:\\/|$))*';
+                            i++; // move over the '/'
+                        }
+                        else {
                             // it's not a globstar, so only match one path segment
-                            reStr += "[^/]*";
+                            reStr += File.WIN ? '[^\\\\/]*'
+                                              : '[^/]*';
                         }
                     }
                     break;
@@ -2485,7 +2519,7 @@ class Globber {
 
         // When regexp 'g' flag is specified don't constrain the regex with ^/$
         if (!this.global) {
-            reStr = "^" + reStr + "$";
+            reStr = '^' + reStr + '$';
         }
 
         return new RegExp(reStr, this.flags);
@@ -2493,14 +2527,15 @@ class Globber {
 }
 
 Globber.all = {
-    E: 'extended',
+    C: 'cased',
+    G: 'greedy',
     S: 'simple'
 };
 
 Globber.cache = {};
 
-Object.values(Globber.all).forEach(v => {
-    Globber.prototype[v] = false;
+Object.keys(Globber.all).forEach(k => {
+    Globber.prototype[Globber.all[k]] = false;
 });
 
 File.Globber = Globber;
