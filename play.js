@@ -2,9 +2,10 @@
 
 const File = require('./File');
 const Globber = File.Globber;
+
 File.COMPANY = 'Foobar';
 
-var gg = Globber.get('iE');
+var gg = Globber.get('i');
 console.log(gg);
 
 var re = gg.compile('**/*.txt');
@@ -16,8 +17,8 @@ var f = File.temp();
 console.log(`home: ${File.home()}`);
 console.log(`profile: ${File.profile('Acme')}`);
 console.log(`profile: ${File.profile()}`);
-console.log(`profile.stat: `, File.profile().stat());
-console.log(`profile.access: `, File.profile().access());
+//console.log(`profile.stat: `, File.profile().stat());
+//console.log(`profile.access: `, File.profile().access());
 
 File.asyncTemp().then(t => {
     console.log(`asyncTemp: ${t}`);
@@ -65,10 +66,18 @@ catch (e) {
 // console.log(`f.parent: ${f.parent}`);
 // console.log(`f.parent.join: ${f.parent.join('foo')}`);
 // console.log(`f.parent.parent: ${f.parent.parent}`);
-//
-// f.list('A').forEach(ff => {
+
+f = File.cwd();
+f.list('A', '*.js').forEach(ff => {
+    console.log(`ff: ${ff} ==> ${ff.name}`);
+});
+// f.list('A', (name, f2) => { console.log('f2',f2); return name.endsWith('.js'); }).forEach(ff => {
 //     console.log(`ff: ${ff} ==> ${ff.name}`);
 // });
+
+f.walk(ff => {
+    console.log(`walk: ${ff}`)
+});
 
 // f = new File('~~/.sencha');
 // console.log(`f: ${f}`);
