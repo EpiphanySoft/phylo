@@ -17,6 +17,7 @@ const fswin = isWin ? require('fswin') : null;
 
 const json5  = require('json5');
 const mkdirp = require('mkdirp');
+const rimraf = require('rimraf');
 const Tmp    = require('tmp');
 
 const re = {
@@ -192,6 +193,27 @@ class File {
     }
 
     /**
+     * Converts a file-system "glob" pattern into a `RegExp` instance.
+     *
+     * For example:
+     *
+     *      glob('*.txt')
+     *      glob('** /*.txt")
+     *
+     * See `File.Globber` for more details on `options`.
+     *
+     * @param {String} pattern The glob pattern to convert.
+     * @param {String} [options=null] Pass `"E"` to enable "extended" globs like
+     * in Bash. Pass "S" to treat "*" as simple (shell-like) wildcards. This will which
+     * matches `"/"` characters with a `"*"`. By default, only `"**"` matches `"/"`.
+     * Other options are passed along a `RegExp` flags (e.g., "i" and "g").
+     * @return {RegExp}
+     */
+    static glob (pattern, options) {
+        return Globber.get(options || '').compile(pattern);
+    }
+
+    /**
      * Returns the `os.homedir()` as a `File` instance. On Windows, this is something
      * like `"C:\Users\Name"`.
      *
@@ -349,6 +371,17 @@ class File {
     static sorter (filePath1, filePath2) {
         var a = File.from(filePath1);
         return a.compare(filePath2);
+    }
+
+    /**
+     * Compares two files using the `File` instances' `compare` method.
+     * @param filePath1 A `File` instance or string path.
+     * @param filePath2 A `File` instance or string path.
+     * @return {Number}
+     */
+    static sorterFilesFirst (filePath1, filePath2) {
+        var a = File.from(filePath1);
+        return a.compare(filePath2, true);
     }
 
     /**
@@ -677,7 +710,7 @@ class File {
     //-----------------------------------------------------------------
     // Path checks
 
-    compare (other) {
+    compare (other, filesFirst) {
         other = File.from(other);
 
         if (!other) {
@@ -693,7 +726,11 @@ class File {
                 let d2 = other._stat.isDirectory();
 
                 if (d1 !== d2) {
-                    return d1 ? -1 : 1;
+                    let c = d1 ? -1 : 1;
+                    if (filesFirst) {
+                        c = -c;
+                    }
+                    return c;
                 }
             }
         }
@@ -1305,8 +1342,24 @@ class File {
     //-----------------------------------------------------------------
     // Directory Operations
 
-    asyncList (mode) {
+    /**
+     * This is the asynchronous version of the `list` method.
+     *
+     * @param {String} [mode] A string containing the mode characters described above.
+     * @param {String/RegExp/Function} matcher Either a wildcard/glob (e.g., '*.txt'),
+     * a `RegExp` or a function that accepts two arguments (the file name (a String) and
+     * the `File` instance) and returns `true` to include the file.
+     * @param {String} matcher.name The name of the file.
+     * @param {File} matcher.file The `File` instance.
+     * @return {Promise<File[]>}
+     */
+    asyncList (mode, matcher) {
         var listMode = ListMode.get(mode);
+
+        // If matcher is a String, we'll get a default globber compile. If it is a
+        // RegExp or a Function, those things are already baked in. In all cases, we
+        // have null or a function that takes a File.
+        let test = Globber.from(matcher);
 
         return new Promise((resolve, reject) => {
             var fail = e => {
@@ -1348,6 +1401,10 @@ class File {
                     });
                 }
 
+                if (test) {
+                    result  = result.filter(f => test(f.name, f));
+                }
+
                 if (listMode.o) {
                     result.sort(File.sorter);
                 }
@@ -1371,20 +1428,49 @@ class File {
 
                 var promises = [];
 
-                //TODO split stat / lstat up
                 names.forEach(name => {
                     let f = new File(this, name);
+                    let promise;
 
                     f._parent = this;
 
-                    result.push(f);
+                    if (test) {
+                        if (listMode.l) {
+                            promise = f.asyncStatLink();
 
-                    // The user may have asked to cache both types of stats...
-                    if (listMode.l) {
-                        promises.push(f.asyncStatLink());
+                            if (listMode.s) {
+                                promise = Promise.all([ promise, f.asyncStat() ]);
+                            }
+                        }
+                        else if (listMode.s) {
+                            promise = f.asyncStat();
+                        }
+
+                        if (promise) {
+                            promise = promise.then(() => {
+                                return test(name, f);
+                            });
+                        }
+                        else {
+                            promise = Promise.resolve(test(name, f));
+                        }
+
+                        promises.push(promise.then(keep => {
+                            if (keep) {
+                                result.push(f);
+                            }
+                        }));
                     }
-                    if (listMode.s) {
-                        promises.push(f.asyncStat());
+                    else {
+                        result.push(f);
+
+                        // The user may have asked to cache both types of stats...
+                        if (listMode.l) {
+                            promises.push(f.asyncStatLink());
+                        }
+                        if (listMode.s) {
+                            promises.push(f.asyncStat());
+                        }
                     }
                 });
 
@@ -1445,6 +1531,19 @@ class File {
      *      // lists all files and cache stat info but do not sort:
      *      dir.list('As-o');
      *
+     * You can also pass a 2nd argument to more arbitrarily restrict the matching files:
+     *
+     *      // List non-hidden files with "txt" extension:
+     *      dir.list('', '*.txt');
+     *
+     *      // List all files with name ending in ".txt":
+     *      dir.list('A', /\.txt$/i);
+     *
+     *      // Return all ".js" files with the Windows "A" (archive) attribute:
+     *      dir.list('f', (name, f) => {
+     *          return name.endsWith('.js') && f.stat().attrib.A;
+     *      });
+     *
      * The valid options are:
      *
      *  - **A** All files are listed, even hidden files. (default is `false`)
@@ -1452,16 +1551,22 @@ class File {
      *  - **f** List only files (non-directories). (default is `false`)
      *  - **l** Cache the result of `statLink` for each file. (default is `false`)
      *  - **o** Order the items by `sorter`. (default is `true`)
+     *  - **O** Order the items by `sorterFilesFirst`. (default is `false`)
      *  - **s** Cache the result of `stat` for each file. (default is `false`)
      *  - **w** Indicates that Windows hidden flag alone determines hidden status
      *   (default is `false` so that files names starting with dots are hidden on all
      *   platforms).
      *  - **T** Throw on failure instead of return `null`.
      *
-     * @param {String} mode A string containing the mode characters described above.
+     * @param {String} [mode] A string containing the mode characters described above.
+     * @param {String/RegExp/Function} matcher Either a wildcard/glob (e.g., '*.txt'),
+     * a `RegExp` or a function that accepts two arguments (the file name (a String) and
+     * the `File` instance) and returns `true` to include the file.
+     * @param {String} matcher.name The name of the file.
+     * @param {File} matcher.file The `File` instance.
      * @return {File[]}
      */
-    list (mode) {
+    list (mode, matcher) {
         var listMode = ListMode.get(mode);
         var ret = [];
         var names;
@@ -1478,40 +1583,45 @@ class File {
             }
         }
 
+        // If matcher is a String, we'll get a default globber compile. If it is a
+        // RegExp or a Function, those things are already baked in. In all cases, we
+        // have null or a function that takes a File.
+        let test = Globber.from(matcher);
+
         for (let i = 0, n = names.length; i < n; ++i) {
             let name = names[i];
 
-            if (!listMode.A && listMode.hideDots && name[0] === '.') {
+            if (listMode.hideDots && name[0] === '.') {
                 continue;
             }
 
             let f = new File(this, name);
-            f._parent = this;
-
             let st = listMode.l ? f.statLink() : (listMode.s ? f.stat() : null);
 
             if (listMode.l && listMode.s) {
                 f.stat(); // cache these but use statLink() result
             }
 
-            if (!listMode.A && !st.attrib.H) {
-                continue;
-            }
-            if (listMode.f) {
-                if (st.isDirectory()) {
+            if (listMode.A || !st.attrib.H) {
+                if (listMode.f && st.isDirectory()) {
                     continue;
                 }
-            }
-            if (listMode.d) {
-                if (!st.isDirectory()) {
+                if (listMode.d && !st.isDirectory()) {
                     continue;
                 }
-            }
 
-            ret.push(f);
+                f._parent = this;
+
+                if (!test || test(name, f)) {
+                    ret.push(f);
+                }
+            }
         }
 
-        if (listMode.o) {
+        if (listMode.O) {
+            ret.sort(File.sorterFilesFirst);
+        }
+        else if (listMode.o) {
             ret.sort(File.sorter);
         }
 
@@ -1554,6 +1664,65 @@ class File {
                 }
             });
         })
+    }
+
+    /**
+     * Asynchronously removes this file or directory.
+     * @param {String} [options] Remove options (currently only "r" for recursive).
+     * @return {Promise<File>} this
+     */
+    asyncRemove (options) {
+        var opt = RemoveOptions.get(options);
+
+        return this.asyncStatLink().then(st => {
+            if (st.error) {
+                throw new Error(st.error);
+            }
+
+            return new Promise((resolve, reject) => {
+                let callback = err => {
+                    if (err) {
+                        reject(err);
+                    } else {
+                        resolve(this);
+                    }
+                };
+
+                if (opt.r) {
+                    rimraf(this.fspath, callback);
+                }
+                else if (st.isDirectory()) {
+                    Fs.rmdir(this.fspath, callback);
+                }
+                else {
+                    Fs.unlink(this.fspath, callback);
+                }
+            });
+        });
+    }
+
+    /**
+     * Removes this file or directory.
+     * @param {String} [options] Remove options (currently only "r" for recursive).
+     * @return {File} this
+     * @chainable
+     */
+    remove (options) {
+        var opt = RemoveOptions.get(options);
+
+        if (this.exists()) {
+            if (opt.r) {
+                rimraf.sync(this.fspath);
+            }
+            else if (this.isDir()) {
+                Fs.rmdirSync(this.fspath);
+            }
+            else {
+                Fs.unlinkSync(this.fspath);
+            }
+        }
+
+        return this;
     }
 
     /**
@@ -1752,29 +1921,32 @@ class File {
     }
 
     /**
-     * Asynchronously descends the file-system starting with the current location, calling
+     * Asynchronously descends the file-system starting with the current location,
+     * calling
      * the provided `before` for each file or folder.
      *
      * @param {String} [mode] The directory `list` mode string to control the traversal.
+     * @param {String/RegExp} [matcher]
      * @param {Function} before A function that will be called for each file/folder
      * starting with this instance. This is the same `before` provided to the `walk`
      * method except that this function can return a Promise.
      * @param {File} before.file The file object referencing the current file or folder
      * to examine.
      * @param {File.Walker} before.state The state object tracking the traversal.
-     * @param {Promise<Boolean>} before.return Return `false` to not descend into a folder.
-     * Can be a Promise to this boolean result.
+     * @param {Promise<Boolean>} before.return Return `false` to not descend into a
+     * folder. Can be a Promise to this boolean result.
      * @param {Function} after A function that will be called after a folder has been
      * descended.
-     * @param {File} after.file The file object referencing the current folder to examine.
+     * @param {File} after.file The file object referencing the current folder to
+     * examine.
      * @param {File.Walker} after.state The state object tracking the traversal.
      * @param {Promise<Boolean>} after.return Can return a Promise to process before
      * continuing.
-     * @return {Promise<Object>} A promise that resolves to the `state` object after the
-     * traversal is complete.
+     * @return {Promise<File.Walker>} A promise that resolves to the `state` object
+     * once the traversal is complete.
      */
-    asyncWalk (mode, before, after) {
-        let state = new File.Walker(this, mode, before, after);
+    asyncWalk (mode, matcher, before, after) {
+        let state = new File.Walker(this, mode, matcher, before, after);
 
         return state.asyncDescend(this).then(() => state);
     }
@@ -1828,7 +2000,17 @@ class File {
      * `before` for processing. The `before` should return `false` to not recurse into
      * a directory.
      *
+     *      dir.walk(f => {
+     *      });
+     *
+     *      dir.walk('A', f => {
+     *      });
+     *
+     *      dir.walk('A', '*.js', f => {
+     *      });
+     *
      * @param {String} [mode] The directory `list` mode string to control the traversal.
+     * @param {String/RegExp} [matcher]
      * @param {Function} before A function that will be called for each file/folder
      * starting with this instance.
      * @param {File} before.file The file object referencing the current file or folder
@@ -1839,10 +2021,10 @@ class File {
      * descended.
      * @param {File} after.file The file object referencing the current folder to examine.
      * @param {File.Walker} after.state The state object tracking the traversal.
-     * @return {Object} The state object used for the traversal.
+     * @return {File.Walker} The `state` object used for the traversal.
      */
-    walk (mode, before, after) {
-        let state = new File.Walker(this, mode, before, after);
+    walk (mode, matcher, before, after) {
+        let state = new File.Walker(this, mode, matcher, before, after);
 
         state.descend(this);
 
@@ -2301,17 +2483,17 @@ Attribute.all.forEach((pair, index) => {
 
 //--------------------
 
-class ListMode {
+class Options {
     static get (mode) {
-        if (mode.isListMode) {
+        if (mode && mode.isOptions) {
             return mode;
         }
 
-        let cache = ListMode.cache;
+        let cache = this.cache;
         let ret = cache[mode];
 
         if (!ret) {
-            cache[mode] = ret = new ListMode(mode);
+            cache[mode] = ret = new this(mode);
             Object.freeze(ret);
         }
 
@@ -2319,7 +2501,7 @@ class ListMode {
     }
 
     constructor (mode) {
-        let defaults = ListMode.defaults;
+        let defaults = this.constructor.defaults;
         let enable = null;
 
         Object.assign(this, defaults);
@@ -2332,17 +2514,248 @@ class ListMode {
                     enable = c === '+';
                 }
                 else {
-                    throw new Error(`Invalid mode modifier "${mode.substr(i-1)}"`);
+                    throw new Error(`Invalid option modifier "${mode.substr(i-1)}"`);
                 }
             }
-            else if (!(c in defaults)) {
-                throw new Error(`Invalid mode flag "${c}"`);
-            }
-            else {
+            else if (c in defaults) {
                 this[c] = enable !== false;
                 enable = null;
             }
+            else {
+                this.unknownOption(c);
+            }
         }
+    }
+
+    unknownOption (c) {
+        throw new Error(`Invalid option flag "${c}"`);
+    }
+}
+
+Options.prototype.isOptions = true;
+
+/**
+ * @class File.Globber
+ *
+ * This class converts "globs" (file-system wildcard expressions like "*.txt") into
+ * equivalent `RegExp` instances. Normally, instances are created by `File.glob()`
+ * method:
+ *
+ *      // Basic mode:
+ *      var txtRe = File.glob('*.txt');
+ *
+ *      var wwwJsOrHtml = File.glob('* /www/{*.js,*.html}');
+ *
+ *      // With paths:
+ *      var allTxtRe = File.glob('** /*.txt');
+ *
+ *      // Greedy wildcards and simple globs:
+ *      var allTxtRe = File.glob('* /*.txt', 'GS');
+ *
+ * ## Case-Sensitivity ("C")
+ *
+ * By default, the `RegExp` is case-sensitive on platforms where file names are also
+ * case-sensitive, and vise-versa. That means, on Windows and Mac OS X, the `RegExp`
+ * is created with the "i" flag.
+ *
+ * Setting this option means that the "i" flag can be provided manually (or not) by the
+ * caller.
+ *
+ * ## Greedy Wildcards ('G')
+ *
+ * When `deep` is _true_ , `'/foo/*'` is translated to a `RegExp` like `'^\/foo\/.*$'`
+ * which will match any string beginning with `'/foo/'`.
+ *
+ * When `deep` is _false_ (the default), `'/foo/*'` is translated to a `RegExp` like
+ * `'^\/foo\/[^/]*$'` which will match any string beginning with `'/foo/'` BUT which does
+ * not have a '/' to the right of it.
+ *
+ * For example,  with `'/foo/*'` these will match: `'/foo/bar'`, `'/foo/bar.txt'` but
+ * these will not `'/foo/bar/baz'`, `'/foo/bar/baz.txt'`.
+ *
+ * Lastly, when `deep` is _false_, `'/foo/**'` is equivalent to `'/foo/*'` with
+ * `deep` set to _true_.
+ *
+ * ## Simple Globs ("S")
+ * To disable matching so called "extended" globs (like bash) and single character
+ * matching, matching ranges of characters, group matching, etc., set the "S" option.
+ *
+ * *NOTE*: This is shamelessly borrowed from: [glob-to-regexp](https://www.npmjs.com/package/glob-to-regexp)
+ * but adjusted for better support for Windows paths.
+ */
+class Globber extends Options {
+    static from (matcher) {
+        return matcher ? Globber.DEFAULT.from(matcher) : null;
+    }
+
+    /**
+     * Accepts a string of `Globber` options ("C", "G" and "S") and `RegExp` flags (all
+     * other characters).
+     * @param {String} options
+     */
+    constructor (options) {
+        super(options);
+
+        // If the user didn't support 'C' then default in 'i' according to platform:
+        if (!this.C && File.NOCASE && this.flags.indexOf('i') < 0) {
+            this.flags += 'i';
+        }
+
+        this.global = this.flags.indexOf('g') > -1;
+    }
+
+    compile (glob) {
+        var str = String(glob);
+        var inGroup = false; // true when in a group (eg {*.html,*.js})
+        var reStr = "";
+        var a, c, prevChar, starCount, nextChar, isGlobstar;
+
+        for (var i = 0, len = str.length; i < len; i++) {
+            c = str[i];
+
+            if (!this.S) {
+                a = 0;
+
+                switch (c) {
+                    case '?':
+                        a = '.';
+                        break;
+
+                    case '[': case ']':
+                        a = c;
+                        break;
+
+                    case '{':
+                        inGroup = true;
+                        a = '(';
+                        break;
+
+                    case '}':
+                        inGroup = false;
+                        a = ')';
+                        break;
+                }
+
+                if (a) {
+                    reStr += a;
+                    continue;
+                }
+            }
+
+            switch (c) {
+                case '\\': // escape
+                    reStr += '\\' + ((++i < len) ? str[i] : c);
+                    break;
+
+                case '$': case '^': case '+': case '.':
+                case '(': case ')': case '=': case '!': case '|':
+                    reStr += '\\' + c;
+                    break;
+
+                case '/':
+                    reStr += File.WIN ? '[\\\\/]' : '\\/';
+                    break;
+
+                case ',':
+                    if (inGroup) {
+                        reStr += '|';
+                        break;
+                    }
+                    reStr += '\\' + c;
+                    break;
+
+                case '*':
+                    // Move over all consecutive '*''s.
+                    // Also store the previous and next characters
+                    prevChar = str[i - 1];
+                    starCount = 1;
+
+                    while (str[i + 1] === '*') {
+                        starCount++;
+                        i++;
+                    }
+
+                    nextChar = str[i + 1];
+
+                    if (this.G) {
+                        // simple mode so treat any number of '*' as one
+                        reStr += '.*';
+                    }
+                    else {
+                        // This is a globstar segment if we have...
+                        // multiple '*''s
+                        isGlobstar = starCount > 1
+                            // from the start of the segment
+                            && (prevChar === '/' || prevChar === undefined)
+                            // to the end of the segment
+                            && (nextChar === '/' || nextChar === undefined);
+
+                        if (isGlobstar) {
+                            // it's a globstar, so match zero or more path segments
+                            reStr += File.WIN ? '(?:[^\\\\/]*(?:[\\\\/]|$))*'
+                                              : '(?:[^/]*(?:\\/|$))*';
+                            i++; // move over the '/'
+                        }
+                        else {
+                            // it's not a globstar, so only match one path segment
+                            reStr += File.WIN ? '[^\\\\/]*'
+                                              : '[^/]*';
+                        }
+                    }
+                    break;
+
+                default:
+                    reStr += c;
+            }
+        }
+
+        // When regexp 'g' flag is specified don't constrain the regex with ^/$
+        if (!this.global) {
+            reStr = '^' + reStr + '$';
+        }
+
+        return new RegExp(reStr, this.flags);
+    }
+    
+    from (matcher) {
+        let type = typeof matcher;
+        
+        if (type === 'function') {
+            return matcher;
+        }
+
+        if (type === 'string') {
+            matcher = this.compile(matcher);
+        }
+
+        return function (path) {
+            return matcher.test(path);
+        };
+    }
+
+    unknownOption (c) {
+        this.flags += c;
+    }
+}
+
+Globber.cache = {};
+Globber.defaults = {
+    C: false,
+    G: false,
+    S: false
+};
+
+Globber.prototype.flags = '';
+
+Globber.DEFAULT = Globber.get('');
+
+File.Globber = Globber;
+
+//--------------------
+
+class ListMode extends Options {
+    constructor (mode) {
+        super(mode);
 
         // If we aren't going with 'l' but we are going to need stats, set 's'
         if (!this.l && (this.f || this.d || !this.A)) {
@@ -2350,7 +2763,7 @@ class ListMode {
         }
 
         // showDots on Windows when options.w is true:
-        this.hideDots = !(File.Win && this.w); // = !showDots
+        this.hideDots = !this.A && !(File.Win && this.w); // = !showDots
     }
 }
 
@@ -2361,6 +2774,7 @@ ListMode.defaults = {
     f: false,
     l: false,
     o: true,
+    O: false,
     s: false,
     w: false,
     T: false
@@ -2369,6 +2783,26 @@ ListMode.defaults = {
 ListMode.prototype.isListMode = true;
 
 File.ListMode = ListMode;
+
+//--------------------
+
+class RemoveOptions extends Options {
+    constructor (mode) {
+        super(mode);
+
+        this.r = this.r || this.R;  // r and R are equivalent
+    }
+}
+
+RemoveOptions.cache = {};
+RemoveOptions.defaults = {
+    r: false,
+    R: false
+};
+
+RemoveOptions.prototype.isRemoveOptions = true;
+
+File.RemoveOptions = RemoveOptions;
 
 //--------------------
 
@@ -2411,30 +2845,45 @@ File.Stat = Stat;
  * @class File.Walker
  */
 class Walker {
-    constructor (root, mode, before, after) {
+    constructor (root, mode, matcher, before, after) {
+        this.matcher = this.test = null;
+
         if (typeof mode === 'function') {
-            after = before;
+            // walk(f => {}, ...);
+            after = matcher;
             before = mode;
             mode = '';
+        }
+        else if (typeof typeof matcher === 'function') {
+            // walk('A', f => {}, ...);
+            after = before;
+            before = matcher;
+        }
+        else {
+            // walk('A', '*.txt', f => {}, ...);
+            let fn = Globber.from(matcher); // fn(string, File)
+
+            // For descending, we need to list directories
+            this.matcher = (name, file) => {
+                return file.isDirectory() || this.test(file);
+            };
+            // But the user's before/after should only be called on matches
+            this.test = file => {
+                let rel = this.root.relativePath(file);
+                return fn(rel, file);
+            }
         }
 
         this.before = before;
         this.after = after;
-        this.listMode = ListMode.get('s' + (mode || ''));
+        this.listMode = ListMode.get('Os' + (mode || ''));
 
         /**
          * @property {File} at
          * The current `File` instance.
          * @readonly
          */
-
-        /**
-         * @property {File} previous
-         * The previously processed `File` instance.
-         * @readonly
-         */
-
-        this.at = this.previous = null;
+        this.at = null;
 
         /**
          * @property {File} root
@@ -2458,12 +2907,27 @@ class Walker {
         this.stop = false;
     }
 
-    asyncDescend (at) {
-        this.previous = this.at;
+    _after (at) {
+        if (!this.after || (this.test && !this.test(at))) {
+            return true;
+        }
+
+        return this.after(at, this);
+    }
+
+    _before (at) {
         this.at = at;
 
+        if (!this.before || (this.test && !this.test(at))) {
+            return true;
+        }
+
+        return this.before(at, this);
+    }
+
+    asyncDescend (at) {
         try {
-            let result = Promise.resolve(this.before ? this.before(at, this) : true);
+            let result = Promise.resolve(this._before(at));
 
             return result.then(r => {
                 if (r === false || this.stop) {
@@ -2472,7 +2936,7 @@ class Walker {
 
                 return at.asyncIsDir().then(isDir => {
                     if (isDir) {
-                        return at.asyncList(this.listMode).then(children => {
+                        return at.asyncList(this.listMode, this.matcher).then(children => {
                             let sequence = Promise.resolve();
 
                             this.stack.push(at);
@@ -2487,7 +2951,7 @@ class Walker {
 
                             if (this.after) {
                                 sequence = sequence.then(() => {
-                                    return this.after(at, this);
+                                    return this._after(at);
                                 });
                             }
 
@@ -2505,29 +2969,22 @@ class Walker {
     }
 
     descend (at) {
-        this.previous = this.at;
-        this.at = at;
+        let ret = this._before(at);
 
-        if (this.before) {
-            let ret = this.before(at, this);
-
-            if (ret === false || this.stop) {
-                return;
-            }
+        if (ret === false || this.stop) {
+            return;
         }
 
         if (at.isDir()) {
             this.stack.push(at);
 
-            let children = at.list(this.listMode);
+            let children = at.list(this.listMode, this.matcher);
 
             for (let i = 0; !this.stop && i < children.length; ++i) {
                 this.descend(children[i]);
             }
 
-            if (this.after) {
-                this.after(at, this);
-            }
+            this._after(at);
 
             this.stack.pop();
         }

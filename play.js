@@ -1,15 +1,24 @@
 'use strict';
 
 const File = require('./File');
+const Globber = File.Globber;
+
 File.COMPANY = 'Foobar';
+
+var gg = Globber.get('i');
+console.log(gg);
+
+var re = gg.compile('**/*.txt');
+console.log(re);
+console.log('match:', re.exec('C:\\Program Files/foo.txt'));
 
 var f = File.temp();
 
 console.log(`home: ${File.home()}`);
 console.log(`profile: ${File.profile('Acme')}`);
 console.log(`profile: ${File.profile()}`);
-console.log(`profile.stat: `, File.profile().stat());
-console.log(`profile.access: `, File.profile().access());
+//console.log(`profile.stat: `, File.profile().stat());
+//console.log(`profile.access: `, File.profile().access());
 
 File.asyncTemp().then(t => {
     console.log(`asyncTemp: ${t}`);
@@ -57,9 +66,54 @@ catch (e) {
 // console.log(`f.parent: ${f.parent}`);
 // console.log(`f.parent.join: ${f.parent.join('foo')}`);
 // console.log(`f.parent.parent: ${f.parent.parent}`);
-//
-// f.list('A').forEach(ff => {
+
+// f = File.cwd();
+// f.list('A', '*.js').forEach(ff => {
 //     console.log(`ff: ${ff} ==> ${ff.name}`);
+// });
+
+var fd = File.cwd().join('foo');
+fd.mkdir();
+
+File.cwd().list('A', ff => {
+    console.log(`ff: ${ff}`);
+});
+
+// console.log(`rm ${fd}`);
+// fd.remove();
+// File.cwd().list('A', ff => {
+//     console.log(`ff: ${ff}`);
+// });
+
+f = fd.join('foo.json');
+f.save(pkg, 'json5');
+f.parent.list('A', '*.json').forEach(ff => {
+    console.log(`ff: ${ff} ==> ${ff.name}`);
+});
+
+console.log(`rm ${f.name}`);
+f.remove();
+f.parent.list('A', '*.json').forEach(ff => {
+    console.log(`ff: ${ff} ==> ${ff.name}`);
+});
+
+//f.save(pkg, 'json5');
+fd.asyncRemove().then(ff => {
+    console.log(`ff: ${ff}`);
+    File.cwd().list('A', cc => {
+        console.log(`cc: ${cc}`);
+    });
+},
+e => {
+    console.log('rm err:', e.message);
+});
+
+// f.list('A', (name, f2) => { console.log('f2',f2); return name.endsWith('.js'); }).forEach(ff => {
+//     console.log(`ff: ${ff} ==> ${ff.name}`);
+// });
+
+// f.walk('A', '**/*.{js,json}', ff => {
+//     console.log(`walk: ${ff}`)
 // });
 
 // f = new File('~~/.sencha');
