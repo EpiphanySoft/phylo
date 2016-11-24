@@ -8,7 +8,7 @@ File.COMPANY = 'Foobar';
 var gg = Globber.get('i');
 console.log(gg);
 
-var re = gg.compile('**/*.txt');
+var re = gg.compile('*.{txt,js}[abc]');
 console.log(re);
 console.log('match:', re.exec('C:\\Program Files/foo.txt'));
 

@@ -1354,6 +1354,11 @@ class File {
      * @return {Promise<File[]>}
      */
     asyncList (mode, matcher) {
+        if (typeof mode !== 'string') {
+            matcher = mode;
+            mode = '';
+        }
+
         var listMode = ListMode.get(mode);
 
         // If matcher is a String, we'll get a default globber compile. If it is a
@@ -1567,6 +1572,11 @@ class File {
      * @return {File[]}
      */
     list (mode, matcher) {
+        if (typeof mode !== 'string') {
+            matcher = mode;
+            mode = '';
+        }
+
         var listMode = ListMode.get(mode);
         var ret = [];
         var names;

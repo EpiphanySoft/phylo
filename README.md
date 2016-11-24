@@ -8,40 +8,36 @@ Consider some examples:
 
     const File = require('phylo');
     
-    // Starting in cwd, climb up as needed until a directory
-    // containing "package.json" is found and then load that
-    // file to return an object.
-    
     var pkg = File.cwd().upToFile('package.json').load();
     
-    // Starting in cwd, climb up as needed to find the Git
-    // VCS root directory (not the ".git" folder itself):
-    
     var root = File.cwd().up('.git');
+    
+The `pkg` value is determined by looking for a directory with a "package.json" file,
+starting in cwd and climbing up as necessary. When that location is found, the file
+read and parsed into an object (by `load()`) and returned.
 
-If you like infinite loops, try this on Windows:
+The `root` value is determined similarly, except that the ".git" folder is not what
+is returned, but simply the directory that contained it (that is, the VCS root).
+
+If you like infinite loops, you can try this on Windows:
 
     var path = require('path');
     
-    for (var dir = process.cwd(); dir; dir = path.resolve(dir, '..')) {
+    for (var d = process.cwd(); d; d = path.resolve(d, '..')) {
         // climb up...
     }
 
-This innocent loops works on Linux/Mac because `path.resolve('/', '..')` returns
-a falsey value. On Windows, however, `path.resolve('C:\\', '..')` returns... well
-`"C:\\"`.
+This innocent loop works on Linux/Mac because `path.resolve('/', '..')` returns
+a false-like value. On Windows, however, `path.resolve('C:\\', '..')` returns... well
+`"C:\\"`!
 
 Compare to `File`:
 
-    for (var dir = File.cwd(); dir; dir = dir.parent) {
+    for (var d = File.cwd(); d; d = d.parent) {
         // climb up...
     }
 
 ## Conventions
-
-It is intended that a `File` instance immutably describes a single path. What is
-(or is not) on disk at that location can change of course, but the description is
-constant.
 
 The `File` API strives to be purely consistent on these points:
 
@@ -57,6 +53,10 @@ The `File` API strives to be purely consistent on these points:
   like access masks, file attributes, status errors, directory list modes, etc. are
   lazily cached as immutable (`Object.freeze()` enforced) instances and reused as
   needed.
+
+It is intended that a `File` instance immutably describes a single path. What is
+(or is not) on disk at that location can change of course, but the description is
+constant.
 
 ## Path Manipulation
 
@@ -202,8 +202,8 @@ of methods.
 
 ### File.Access
 
-`File.Access` objects are succinct descriptions of read, write and execute permission
-masks. These replace the use of `fs.constants.R_OK`, `fs.constants.W_OK` and
+`File.Access` objects are descriptors of read, write and execute permission masks.
+These simplify the use of `fs.constants.R_OK`, `fs.constants.W_OK` and
 `fs.constants.X_OK`. For example:
 
     try {
@@ -304,8 +304,8 @@ refreshed using the `restat()` family of methods.
 
 You can get a directory listing of `File` objects using:
 
- - `list(mode)`
- - `asyncList(mode)`
+ - `list(mode, matcher)`
+ - `asyncList(mode, matcher)`
 
 The `mode` parameter is a string that consists of the following single letter codes
 with the described meaning:
@@ -315,6 +315,7 @@ with the described meaning:
  - `f` - List only files (non-directories). (default is `false`)
  - `l` - Cache the result of `statLink` for each file. (default is `false`)
  - `o` - Order the items by `sorter`. (default is `true`)
+ - `O` - Order the items by `sorterFilesFirst`. (default is `false`)
  - `s` - Cache the result of `stat` for each file. (default is `false`)
  - `w` - Indicates that Windows hidden flag alone determines hidden status
   (default is `false` so that files names starting with dots are hidden on all
@@ -341,6 +342,76 @@ Some examples:
 The `s` option can be useful during an `asyncList()` operation to allow subsequent
 use of the simpler, synchronous `stat()` method since it will use the cached stat
 object.
+
+The `matcher` can be a function to call for each candidate:
+
+    dir.list(name => {
+        return name.endsWith('.txt');
+    });
+    
+    dir.list((name, f) => {
+        return f.extent === 'txt';  // f is a File instance
+    });
+
+The `matcher` can also be a `RegExp`:
+
+    dir.list(/\.txt$/i);
+
+Lastly, `matcher` can be a "glob" (a shell-like wildcard). In this case, since this
+is also a string, the `mode` must be passed first:
+
+    dir.list('Af', '*.txt');
+
+### Globs
+
+The basic form of globs is a file name and extension pattern (like `'*.txt'`). The `'*'`
+character matches only file name characters and not path separators (`'/'` and `'\'` on
+Windows).
+
+Internally globs are converted into `RegExp` objects. The conversion of `'*.txt'` is
+platform-specific. For Linux, it is:
+
+    /^[^/]*\.txt$/
+
+On Windows, it converts to this:
+
+    /^[^\\/]*\.txt$/i
+
+This is because Windows uses either `'/'` and `'\'` as path separators and filenames
+are case-insensitive.
+
+To match paths, you can use a "glob star" such as `'**/*.txt'`. This glob converts to
+this on Linux:
+
+    /^(?:[^/]*(?:[/]|$))*[^/]*\.txt$/
+
+Globs also support groups inside `'{'` and `'}'` such as: `'*.{txt,js}'`: 
+ 
+    /^[^/]*\.(txt|js)$/
+
+A character set like `'*.{txt,js}[abc]'` converts to:
+
+    /^[^/]*\.(txt|js)[abc]$/
+
+### Explicit Glob Conversion
+
+The glob parser has some advanced options via the `File.glob()` method. The `File.glob()`
+method converts a glob string into a `RegExp`. This conversion can be customized using
+the second argument as the `options`. This string can contain any of these characters:
+
+ - `C` - Case-sensitivity is manual (disables auto-detection by platform)
+ - `G` - Greedy `'*'` expansion expands `'*'` to match path separators (i.e., `'/'`)
+ - `S` - Simple pattern mode (disables grouping and character sets)
+
+All other characters are passed as the `RegExp` flags.
+
+The `'S'` options enables "simple" glob mode and produces this conversion to `RegExp`:
+
+    dir.list(File.glob('*.{txt,js}', 'S'));
+
+    == /^[^/]*\.{txt\,js}$/
+
+This would be useful when dealing with files that have `'{'` in their name.
 
 ## File-System Traversal
 
@@ -386,8 +457,8 @@ Asynchronous forms (TODO - not implemented yet):
  - `tips(mode, test)` - Returns a `File[]` of the top-most items passing the `test`.
   Once a match is found, no descent into that folder is made (hence, the "tips" of
   the sub-tree). Uses `walk(mode)` to descend the file-system.
- - `walk(mode, before, after)` - Calls `before` for all items that
-  `list(mode)` generates recursively, then processes those items and
+ - `walk(mode, matcher, before, after)` - Calls `before` for all items that
+  `list(mode, matcher)` generates recursively, then processes those items and
   lastly calls `after`. Both `before` and `after` are optional but one
   should be provided.
 
@@ -406,7 +477,6 @@ The `walk` method's `before` and `after` handlers looks like this:
 The `state` object has the following members:
 
  - `at` - The current `File` being processed.
- - `previous` - The `File` previously passed to the handler.
  - `root` - The `File` used to start the descent.
  - `stack` - A `File[]` of instances starting with the `File` used to start things.
  - `stop` - A boolean property that can be set to `true` to abort the `walk`.
@@ -426,7 +496,7 @@ The `state` parameter is the same as for the `walk` method.
 Asynchronous forms:
 
  - `asyncTips(mode, test)`
- - `asyncWalk(mode, before, after)`
+ - `asyncWalk(mode, matcher, before, after)`
 
 The `test`, `before` and `after` handlers of the asynchronous methods
 accept the same parameters and return the same results as with the
@@ -606,6 +676,33 @@ The `encoding` can be specified in the `options` or directly to the `writer`:
         options: {
             encoding: 'utf16'
         }
+    });
+
+## Removing Files and Folders
+
+To remove a file or empty folder, you can use `remove()`:
+
+    file.remove();
+
+Internally, `remove()` calls `fs.unlinkSync()` or `fs.rmdirSync()`.
+
+A folder tree can be removed by pass `'r'`:
+
+    dir.remove('r');
+
+This will synchronously remove all children of `dir` and then remove `dir` itself.
+Internally, this is handled by [`rimraf`](https://www.npmjs.com/package/rimraf).
+
+The asynchronous form of `remove()` is:
+
+    dir.asyncRemove().then(() => {
+        // dir is gone if it was empty
+    });
+
+Or:
+
+    dir.asyncRemove('r').then(() => {
+        // dir and its children are gone
     });
 
 ## Static Methods
