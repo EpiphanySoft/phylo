@@ -363,25 +363,39 @@ class File {
     }
 
     /**
-     * Compares two files using the `File` instances' `compare` method.
+     * Compares two files using the `File` instances' `compare('d')` method to sort
+     * folder before files (each group being sorted by name).
      * @param filePath1 A `File` instance or string path.
      * @param filePath2 A `File` instance or string path.
      * @return {Number}
      */
     static sorter (filePath1, filePath2) {
         var a = File.from(filePath1);
-        return a.compare(filePath2);
+        return a.compare(filePath2, 'd');
     }
 
     /**
-     * Compares two files using the `File` instances' `compare` method.
+     * Compares two files using the `File` instances' `compare('f')` method to sort
+     * files before folders (each group being sorted by name).
      * @param filePath1 A `File` instance or string path.
      * @param filePath2 A `File` instance or string path.
      * @return {Number}
      */
     static sorterFilesFirst (filePath1, filePath2) {
         var a = File.from(filePath1);
-        return a.compare(filePath2, true);
+        return a.compare(filePath2, 'f');
+    }
+
+    /**
+     * Compares two files using the `File` instances' `compare(false)` method to sort
+     * files and folder together by name.
+     * @param filePath1 A `File` instance or string path.
+     * @param filePath2 A `File` instance or string path.
+     * @return {Number}
+     */
+    static sorterByPath (filePath1, filePath2) {
+        var a = File.from(filePath1);
+        return a.compare(filePath2, false);
     }
 
     /**
@@ -710,7 +724,16 @@ class File {
     //-----------------------------------------------------------------
     // Path checks
 
-    compare (other, filesFirst) {
+    /**
+     * Compare this `File` to the other `File` or path and return -1, 0 or 1 if this
+     * file is less-then, equal to or great then the `other`.
+     * @param {File/String} other The file or path to which to compare this `File`.
+     * @param {'d'/'f'/false} [first='d'] Pass `'d'` to group directories before files,
+     * `'f'` to group files before directories or `false` to sort only by path.
+     * @return {Number} -1, 0 or 1 if this file is, respectively, less-than, equal to
+     * or great-than the `other`.
+     */
+    compare (other, first) {
         other = File.from(other);
 
         if (!other) {
@@ -720,14 +743,16 @@ class File {
         if (this._stat && other._stat) {
             let p = this.parent;
 
-            if (p && p.equals(other.parent)) {
+            first = (first === false) ? 0 : (first || 'd');
+
+            if (first && p && p.equals(other.parent)) {
                 // Two files in the same parent folder both w/stats
                 let d1 = this._stat.isDirectory();
                 let d2 = other._stat.isDirectory();
 
                 if (d1 !== d2) {
                     let c = d1 ? -1 : 1;
-                    if (filesFirst) {
+                    if (first === 'f') {
                         c = -c;
                     }
                     return c;

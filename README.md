@@ -8,16 +8,19 @@ Consider some examples:
 
     const File = require('phylo');
     
-    var pkg = File.cwd().upToFile('package.json').load();
-    
     var root = File.cwd().up('.git');
     
-The `pkg` value is determined by looking for a directory with a "package.json" file,
-starting in cwd and climbing up as necessary. When that location is found, the file
-read and parsed into an object (by `load()`) and returned.
+    var pkg = File.cwd().upToFile('package.json').load();
 
-The `root` value is determined similarly, except that the ".git" folder is not what
-is returned, but simply the directory that contained it (that is, the VCS root).
+The `root` value is by looking for a directory with a `'.git'` file or folder in
+it, starting at `cwd` and climbing up as necessary. When that location is found, 
+it is returned as a `File` object. Note, this is not the `'.git'` folder itself,
+but the folder that _contains_ the `'.git'` folder (that is, the VCS root).
+
+The `pkg` value is determined in a similar manner but with two differences. The
+first is that the location for which we are searching must contain a _file_ (not
+a _folder_) with the name `'package.json'`. Secondly, it is the `'package.json'`
+file that is returned as a `File` instance, not the location that contained it.
 
 If you like infinite loops, you can try this on Windows:
 
@@ -27,11 +30,11 @@ If you like infinite loops, you can try this on Windows:
         // climb up...
     }
 
-This innocent loop works on Linux/Mac because `path.resolve('/', '..')` returns
-a false-like value. On Windows, however, `path.resolve('C:\\', '..')` returns... well
-`"C:\\"`!
+This innocent loop works on Linux and Mac OS X because `path.resolve('/', '..')`
+returns a falsy value. On Windows, however, `path.resolve('C:\\', '..')` returns...
+well `'C:\\'`!
 
-Compare to `File`:
+Compare the above to the same idea using `File`:
 
     for (var d = File.cwd(); d; d = d.parent) {
         // climb up...
@@ -54,6 +57,21 @@ The `File` API strives to be purely consistent on these points:
   lazily cached as immutable (`Object.freeze()` enforced) instances and reused as
   needed.
 
+The conflict between Node.js `path` and `fs` API's is a major reason for these
+naming conventions. Consider:
+
+    let s = path.join(process.cwd(), 'foo');   // sync
+    
+    fs.mkdir(s);  // async!
+
+Using `File`:
+
+    let f = File.cwd().join('foo');   // sync (of course);
+    
+    f.mkdir();  // also sync
+
+    f.asyncMkdir().then(...  // async obviously
+
 It is intended that a `File` instance immutably describes a single path. What is
 (or is not) on disk at that location can change of course, but the description is
 constant.
@@ -69,10 +87,10 @@ path strings (like the `path` module).
 Instances of `File` provide these **readonly** properties:
 
  - `path` - The path to the file as a `String` (passed to the `constructor`).
- - `extent` - The file's type as a `String` (e.g., "json").
- - `name` - The file's name as a `String` (e.g., "package.json").
+ - `extent` - The file's type as a `String` (e.g., `'json'`).
+ - `name` - The file's name as a `String` (e.g., `'package.json'`).
  - `parent` - The `File` for the parent directory (`null` at root).
- - `fspath` - The `path` string resolved for "~" (usable by `fs` or `path` modules)
+ - `fspath` - The `path` string resolved for `'~'` (usable by `fs` or `path` modules)
 
 ### Methods
 
@@ -116,13 +134,28 @@ Canonicalization will result in `null` if there is no real file.
 
 ## Path Info and Comparison
 
+Some useful information about a file path:
+
+ - `isAbsolute()` - Returns `true` if the file an absolute path (`path.isAbsolute()`)
+ - `isRelative()` - Returns `true` if the file a relative path (`path.isRelative()`)
+
 You can compare two paths in a few different ways:
 
- - `compare(o)` - Returns -1, 0 or 1 if `this` is less, equal or greater than `o`
+ - `compare(o,first)` - Returns -1, 0 or 1 if `this` is less-than, equal or
+  greater-than `o`. By default, directories sort before files (first = `'d'`). To
+  instead group files before directories, pass `'f'`. To compare only paths, pass
+  `false`.
+  in which case files sort before directories.
  - `equals(o)` - Returns `true` if `this` is equal to `o` (`compare(o) === 0`)
  - `prefixes(o)` - Returns `true` if `this` is a path prefix of `o`. It is
   recommended to use `absolutify()` on both instances first to avoid confusion with
   `..` segments.
+
+There are some static sort methods that can be used by `Array.sort()`:
+
+ - `File.sorter` - Calls `f1.compare(f2, 'd')` to group directories before files.
+ - `File.sorterFilesFirst` - Calls `f1.compare(f2, 'df)` to group files first.
+ - `File.sorterByPath` - Calls `f1.compare(f2, false)` to sort only by path.
 
 File name comparisons are case-insensitive on Windows and Mac OS X, so we have
 
@@ -134,19 +167,14 @@ File name comparisons are case-insensitive on Windows and Mac OS X, so we have
     > true   (on Windows and Mac)
     > false  (on Linux)
 
-Some useful information about a file path:
-
- - `isAbsolute()` - Returns `true` if the file an absolute path (`path.isAbsolute()`)
- - `isRelative()` - Returns `true` if the file a relative path (`path.isRelative()`)
-
 ## File-System Information
 
-To get information about the file on disk:
+To get information about the file on disk (synchronously):
 
  - `access()` - Returns a `File.Access` object. If the file does not exist (or some
   other error is encountered), this object will have an `error` property.
- - `can(mode)` - Returns `true` if this exists with the desired access (`mode` is "r",
-  "rw", "rwx", "w", "wx" or "x").
+ - `can(mode)` - Returns `true` if this exists with the desired access (`mode` is `'r'`,
+  `'rw'`, `'rwx'`, `'w'`, `'wx'` or `'x'`).
  - `exists()` - Returns `true` if the file exists.
  - `has(rel)` - Returns `true` if a file or folder exists at the `rel` path from this file.
  - `hasDir(rel)` - Returns `true` if a folder exists at the `rel` path from this file.
@@ -161,8 +189,8 @@ To get information about the file on disk:
   the file does not exist (or some other error is encountered), this object will have an
   `error` property.
 
-The `error` property will be a value like `"ENOENT"` (for file/folder not found), and
-`"EACCES"` or `"EPERM"` for permission denied. These codes come directly from the
+The `error` property will be a value like `'ENOENT'` (for file/folder not found), and
+`'EACCES'` or `'EPERM'` for permission denied. These codes come directly from the
 underlying API.
 
 In asynchronous form:
@@ -191,6 +219,15 @@ boolean properties:
  - `R` - Readonly
  - `S` - System
 
+For example:
+
+    if (File.cwd().join('package.json').stat().attrib.H) {
+        // If the package.json file is hidden... (wat?)
+    }
+
+Note, if there is no `'package.json'` file, the `stat()` method will return an object
+with an `error` property and an empty `attrib` object (it won't have `H` set).
+
 The [`fswin`](https://www.npmjs.com/package/fswin) module is used to retrieve this
 information on Windows. On other platforms, this object contains `false` values for all
 of the above properties.
@@ -203,8 +240,8 @@ of methods.
 ### File.Access
 
 `File.Access` objects are descriptors of read, write and execute permission masks.
-These simplify the use of `fs.constants.R_OK`, `fs.constants.W_OK` and
-`fs.constants.X_OK`. For example:
+These are much simpler to use than the `fs.constants.R_OK`, `fs.constants.W_OK` and
+`fs.constants.X_OK` bit-masks. For example:
 
     try {
         let mode = fs.statSync(file).mode;
@@ -260,7 +297,7 @@ these same properties as boolean values. The full set of properties is a bit lar
  - `wx` - True if `W_OK` and `X_OK` are both set.
  - `x` - True if `X_OK` is set.
  - `mask` - The combination of `fs.constants` flags `R_OK`, `W_OK` and/or `X_OK`
- - `name` - The string "r", "rw", "rx", "rwx", "w", "wx" or "x"
+ - `name` - The string `'r'`, `'rw'`, `'rx'`, `'rwx'`, `'w'`, `'wx'` or `'x'`
 
 ### Classification
 
@@ -343,7 +380,8 @@ The `s` option can be useful during an `asyncList()` operation to allow subseque
 use of the simpler, synchronous `stat()` method since it will use the cached stat
 object.
 
-The `matcher` can be a function to call for each candidate:
+The `matcher` can be a function to call for each candidate. This function receives
+the arguments `(name, file)`. For example:
 
     dir.list(name => {
         return name.endsWith('.txt');
@@ -400,18 +438,32 @@ method converts a glob string into a `RegExp`. This conversion can be customized
 the second argument as the `options`. This string can contain any of these characters:
 
  - `C` - Case-sensitivity is manual (disables auto-detection by platform)
- - `G` - Greedy `'*'` expansion expands `'*'` to match path separators (i.e., `'/'`)
+ - `G` - Greedy `'*'` expansion changes `'*'` to match path separators (i.e., `'/'`)
  - `S` - Simple pattern mode (disables grouping and character sets)
 
-All other characters are passed as the `RegExp` flags.
+All other characters are passed as the `RegExp` flags (e.g., `'i'` and `'g'`).
 
-The `'S'` options enables "simple" glob mode and produces this conversion to `RegExp`:
+The `'S'` options enables "simple" glob mode which disables groups and character sets.
+For example:
 
     dir.list(File.glob('*.{txt,js}', 'S'));
 
     == /^[^/]*\.{txt\,js}$/
 
 This would be useful when dealing with files that have `'{'` in their name.
+
+To force case-sensitive comparison (e.g., on Windows):
+
+    let re = File.glob('*.txt', 'C');
+
+    /^[^\\/]*\.txt$/
+
+To force case-insensitive comparison (e.g., on Linux), you need to use `'C'` to make
+this a manual choice, and `'i'` to make the `RegExp` ignore case:
+
+    let re = File.glob('*.txt', 'Ci');
+
+    /^[^/]*\.txt$/i
 
 ## File-System Traversal
 
@@ -435,12 +487,12 @@ The different between these forms can be seen best by example:
 
     var file = File.cwd().up('.git');
     
-    // file is the parent directory that has ".git", not the ".git"
+    // file is the parent directory that has '.git', not the '.git'
     // folder itself. The file may be File.cwd() or some parent.
     
     var git = File.cwd().upTo('.git');
     
-    // git is the ".git" folder from perhaps File.cwd() or some other
+    // git is the '.git' folder from perhaps File.cwd() or some other
     // parent folder.
 
 Asynchronous forms (TODO - not implemented yet):
@@ -473,7 +525,12 @@ The `walk` method's `before` and `after` handlers looks like this:
             state.stop = true;  // stop all further walking
         }
     }
-    
+
+The optional `matcher` can be a `String` or a `RegExp` and have the same meaning
+as with `list()`. The `matcher` cannot, however, be a function. This is because it
+would be ambiguous with `before` and would really offer no advantage over handling
+things in the `before` method anyway.
+
 The `state` object has the following members:
 
  - `at` - The current `File` being processed.
@@ -684,9 +741,9 @@ To remove a file or empty folder, you can use `remove()`:
 
     file.remove();
 
-Internally, `remove()` calls `fs.unlinkSync()` or `fs.rmdirSync()`.
+Internally, `remove()` calls either `fs.unlinkSync()` or `fs.rmdirSync()`.
 
-A folder tree can be removed by pass `'r'`:
+A folder tree can be removed by passing the `'r'` option:
 
     dir.remove('r');
 
@@ -720,15 +777,15 @@ In reverse:
 
 The `path()` method accepts `String` or `File` and returns the path (the original
 string or the `path` property of the `File`). Similar to `from()`, the `path()` method
-returns `''` when passed `null`. That value is still "falsey" but won't throw null
+returns `''` when passed `null`. That value is still falsy but won't throw null
 reference errors if used.
 
-There is also `fspath()` that resolves `"~"` path elements:
+There is also `fspath()` that resolves `'~'` path elements:
 
     var s = File.fspath(file);
 
 If the argument is already a `String` it is simply returned (just like the `path()`
-method). If the string may contain `"~"` elements, the safe conversion would be:
+method). If the string may contain `'~'` elements, the safe conversion would be:
 
     var s = File.from(file).fspath;
 
@@ -798,25 +855,25 @@ use the module name in the filename to ensure no collisions occur.
 
 ### The Magic Tilde
 
-A common "pseudo" root folder for the user's home folder is `"~"`. One often sees
+A common pseudo-root folder for the user's home folder is `'~'`. One often sees
 paths like this:
 
     var dir = new File('~/.acme');
 
-The `"~"` pseudo-root is recognized throughout `File` methods. It is resolved to the
+The `'~'` pseudo-root is recognized throughout `File` methods. It is resolved to the
 actual location using `absolutify()` or `canonicalize()` (or their other flavors). In
 other cases the pseudo-root is preserved. For example:
 
     var dir = new File('~/.acme');
     
-    console.log(dir.parent); // just "~"
+    console.log(dir.parent); // just '~'
     console.log(dir.join('foo'));  // ~/acme/foo
 
 These `File` instances can be read using `load()` as well:
 
     var data = File.from('~/.acme/settings.json').load();
 
-In addition there is also the `"~~/"` pseudo-root that maps the the `profile()` directory
+In addition there is also the `'~~/'` pseudo-root that maps the the `profile()` directory
 instead of the raw homedir.
 
 That is:
