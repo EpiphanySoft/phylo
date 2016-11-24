@@ -373,6 +373,17 @@ class File {
     }
 
     /**
+     * Compares two files using the `File` instances' `compare` method.
+     * @param filePath1 A `File` instance or string path.
+     * @param filePath2 A `File` instance or string path.
+     * @return {Number}
+     */
+    static sorterFilesFirst (filePath1, filePath2) {
+        var a = File.from(filePath1);
+        return a.compare(filePath2, true);
+    }
+
+    /**
      * Returns the `fs.Stats` for the specified `File` or path. If the file does not
      * exist, or an error is encountered determining the stats, the `error` property
      * will be set accordingly.
@@ -698,7 +709,7 @@ class File {
     //-----------------------------------------------------------------
     // Path checks
 
-    compare (other) {
+    compare (other, filesFirst) {
         other = File.from(other);
 
         if (!other) {
@@ -714,7 +725,11 @@ class File {
                 let d2 = other._stat.isDirectory();
 
                 if (d1 !== d2) {
-                    return d1 ? -1 : 1;
+                    let c = d1 ? -1 : 1;
+                    if (filesFirst) {
+                        c = -c;
+                    }
+                    return c;
                 }
             }
         }
@@ -1535,6 +1550,7 @@ class File {
      *  - **f** List only files (non-directories). (default is `false`)
      *  - **l** Cache the result of `statLink` for each file. (default is `false`)
      *  - **o** Order the items by `sorter`. (default is `true`)
+     *  - **O** Order the items by `sorterFilesFirst`. (default is `false`)
      *  - **s** Cache the result of `stat` for each file. (default is `false`)
      *  - **w** Indicates that Windows hidden flag alone determines hidden status
      *   (default is `false` so that files names starting with dots are hidden on all
@@ -1601,7 +1617,10 @@ class File {
             }
         }
 
-        if (listMode.o) {
+        if (listMode.O) {
+            ret.sort(File.sorterFilesFirst);
+        }
+        else if (listMode.o) {
             ret.sort(File.sorter);
         }
 
@@ -2697,6 +2716,7 @@ ListMode.defaults = {
     f: false,
     l: false,
     o: true,
+    O: false,
     s: false,
     w: false,
     T: false
@@ -2748,47 +2768,44 @@ File.Stat = Stat;
  */
 class Walker {
     constructor (root, mode, matcher, before, after) {
+        this.matcher = this.test = null;
+
         if (typeof mode === 'function') {
             // walk(f => {}, ...);
             after = matcher;
             before = mode;
             mode = '';
-            matcher = null;
+        }
+        else if (typeof typeof matcher === 'function') {
+            // walk('A', f => {}, ...);
+            after = before;
+            before = matcher;
         }
         else {
-            let mt = typeof matcher;
+            // walk('A', '*.txt', f => {}, ...);
+            let fn = Globber.from(matcher); // fn(string, File)
 
-            if (typeof mt === 'function') {
-                // walk('A', f => {}, ...);
-                after = before;
-                before = matcher;
-                matcher = null;
-            }
-            else {
-                // walk('A', '*.txt', f => {}, ...);
-                if (mt === 'string') {
-                    matcher = Globber.from(matcher); // now fn(string, File)
-                }
+            // For descending, we need to list directories
+            this.matcher = (name, file) => {
+                return file.isDirectory() || this.test(file);
+            };
+            // But the user's before/after should only be called on matches
+            this.test = file => {
+                let rel = this.root.relativePath(file);
+                return fn(rel, file);
             }
         }
 
         this.before = before;
         this.after = after;
-        this.listMode = ListMode.get('s' + (mode || ''));
+        this.listMode = ListMode.get('Os' + (mode || ''));
 
         /**
          * @property {File} at
          * The current `File` instance.
          * @readonly
          */
-
-        /**
-         * @property {File} previous
-         * The previously processed `File` instance.
-         * @readonly
-         */
-
-        this.at = this.previous = null;
+        this.at = null;
 
         /**
          * @property {File} root
@@ -2812,12 +2829,27 @@ class Walker {
         this.stop = false;
     }
 
-    asyncDescend (at) {
-        this.previous = this.at;
+    _after (at) {
+        if (!this.after || (this.test && !this.test(at))) {
+            return true;
+        }
+
+        return this.after(at, this);
+    }
+
+    _before (at) {
         this.at = at;
 
+        if (!this.before || (this.test && !this.test(at))) {
+            return true;
+        }
+
+        return this.before(at, this);
+    }
+
+    asyncDescend (at) {
         try {
-            let result = Promise.resolve(this.before ? this.before(at, this) : true);
+            let result = Promise.resolve(this._before(at));
 
             return result.then(r => {
                 if (r === false || this.stop) {
@@ -2826,7 +2858,7 @@ class Walker {
 
                 return at.asyncIsDir().then(isDir => {
                     if (isDir) {
-                        return at.asyncList(this.listMode).then(children => {
+                        return at.asyncList(this.listMode, this.matcher).then(children => {
                             let sequence = Promise.resolve();
 
                             this.stack.push(at);
@@ -2841,7 +2873,7 @@ class Walker {
 
                             if (this.after) {
                                 sequence = sequence.then(() => {
-                                    return this.after(at, this);
+                                    return this._after(at);
                                 });
                             }
 
@@ -2859,29 +2891,22 @@ class Walker {
     }
 
     descend (at) {
-        this.previous = this.at;
-        this.at = at;
+        let ret = this._before(at);
 
-        if (this.before) {
-            let ret = this.before(at, this);
-
-            if (ret === false || this.stop) {
-                return;
-            }
+        if (ret === false || this.stop) {
+            return;
         }
 
         if (at.isDir()) {
             this.stack.push(at);
 
-            let children = at.list(this.listMode);
+            let children = at.list(this.listMode, this.matcher);
 
             for (let i = 0; !this.stop && i < children.length; ++i) {
                 this.descend(children[i]);
             }
 
-            if (this.after) {
-                this.after(at, this);
-            }
+            this._after(at);
 
             this.stack.pop();
         }

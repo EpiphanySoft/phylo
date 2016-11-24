@@ -75,7 +75,7 @@ f.list('A', '*.js').forEach(ff => {
 //     console.log(`ff: ${ff} ==> ${ff.name}`);
 // });
 
-f.walk(ff => {
+f.walk('A', '**/*.{js,json}', ff => {
     console.log(`walk: ${ff}`)
 });
 
