@@ -6,21 +6,20 @@ convenience and clarity of expression. The primary export of `phylo` is the
 
 Consider some examples:
 
-    const File = require('phylo');
-    
-    var root = File.cwd().up('.git');
-    
-    var pkg = File.cwd().upToFile('package.json').load();
+![screenshot](screenshot.png)
 
 The `root` value is determined by looking for a directory with a `'.git'` file or
 folder in it, starting at `cwd` and climbing up as necessary. When that location is
 found, it is returned as a `File` object. Note, this is not the `'.git'` folder
 itself, but the folder that _contains_ the `'.git'` folder (that is, the VCS root).
 
-The `pkg` value is determined in a similar manner but with two differences. The
+The `pkgFile` value is determined in a similar manner but with two differences. The
 first is that the location for which we are searching must contain a _file_ (not
 a _folder_) with the name `'package.json'`. Secondly, it is the `'package.json'`
 file that is returned as a `File` instance, not the location that contained it.
+
+The `load()` method will read the file and parse the contents into an object based
+on the `'.json'` file type.
 
 If you like infinite loops, you can try this on Windows:
 

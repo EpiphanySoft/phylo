@@ -5,14 +5,14 @@ const Globber = File.Globber;
 
 File.COMPANY = 'Foobar';
 
-var gg = Globber.get('i');
+let gg = Globber.get('i');
 console.log(gg);
 
-var re = gg.compile('*.{txt,js}[abc]');
+let re = gg.compile('*.{txt,js}[abc]');
 console.log(re);
 console.log('match:', re.exec('C:\\Program Files/foo.txt'));
 
-var f = File.temp();
+let f = File.temp();
 
 console.log(`home: ${File.home()}`);
 console.log(`profile: ${File.profile('Acme')}`);
@@ -72,7 +72,7 @@ catch (e) {
 //     console.log(`ff: ${ff} ==> ${ff.name}`);
 // });
 
-var fd = File.cwd().join('foo');
+let fd = File.cwd().join('foo');
 fd.mkdir();
 
 File.cwd().list('A', ff => {
