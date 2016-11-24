@@ -17,6 +17,7 @@ const fswin = isWin ? require('fswin') : null;
 
 const json5  = require('json5');
 const mkdirp = require('mkdirp');
+const rimraf = require('rimraf');
 const Tmp    = require('tmp');
 
 const re = {
@@ -1666,6 +1667,65 @@ class File {
     }
 
     /**
+     * Asynchronously removes this file or directory.
+     * @param {String} [options] Remove options (currently only "r" for recursive).
+     * @return {Promise<File>} this
+     */
+    asyncRemove (options) {
+        var opt = RemoveOptions.get(options);
+
+        return this.asyncStatLink().then(st => {
+            if (st.error) {
+                throw new Error(st.error);
+            }
+
+            return new Promise((resolve, reject) => {
+                let callback = err => {
+                    if (err) {
+                        reject(err);
+                    } else {
+                        resolve(this);
+                    }
+                };
+
+                if (opt.r) {
+                    rimraf(this.fspath, callback);
+                }
+                else if (st.isDirectory()) {
+                    Fs.rmdir(this.fspath, callback);
+                }
+                else {
+                    Fs.unlink(this.fspath, callback);
+                }
+            });
+        });
+    }
+
+    /**
+     * Removes this file or directory.
+     * @param {String} [options] Remove options (currently only "r" for recursive).
+     * @return {File} this
+     * @chainable
+     */
+    remove (options) {
+        var opt = RemoveOptions.get(options);
+
+        if (this.exists()) {
+            if (opt.r) {
+                rimraf.sync(this.fspath);
+            }
+            else if (this.isDir()) {
+                Fs.rmdirSync(this.fspath);
+            }
+            else {
+                Fs.unlinkSync(this.fspath);
+            }
+        }
+
+        return this;
+    }
+
+    /**
      * Generates a temporary file name in this directory and returns its path.
      * @param {Object} [options] Options for `tmpNameSync()` from the `tmp` module.
      * @return {File}
@@ -2425,6 +2485,10 @@ Attribute.all.forEach((pair, index) => {
 
 class Options {
     static get (mode) {
+        if (mode && mode.isOptions) {
+            return mode;
+        }
+
         let cache = this.cache;
         let ret = cache[mode];
 
@@ -2467,6 +2531,8 @@ class Options {
         throw new Error(`Invalid option flag "${c}"`);
     }
 }
+
+Options.prototype.isOptions = true;
 
 /**
  * @class File.Globber
@@ -2688,14 +2754,6 @@ File.Globber = Globber;
 //--------------------
 
 class ListMode extends Options {
-    static get (mode) {
-        if (mode.isListMode) {
-            return mode;
-        }
-
-        return super.get(mode);
-    }
-
     constructor (mode) {
         super(mode);
 
@@ -2725,6 +2783,26 @@ ListMode.defaults = {
 ListMode.prototype.isListMode = true;
 
 File.ListMode = ListMode;
+
+//--------------------
+
+class RemoveOptions extends Options {
+    constructor (mode) {
+        super(mode);
+
+        this.r = this.r || this.R;  // r and R are equivalent
+    }
+}
+
+RemoveOptions.cache = {};
+RemoveOptions.defaults = {
+    r: false,
+    R: false
+};
+
+RemoveOptions.prototype.isRemoveOptions = true;
+
+File.RemoveOptions = RemoveOptions;
 
 //--------------------
 

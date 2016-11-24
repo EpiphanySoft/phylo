@@ -67,17 +67,54 @@ catch (e) {
 // console.log(`f.parent.join: ${f.parent.join('foo')}`);
 // console.log(`f.parent.parent: ${f.parent.parent}`);
 
-f = File.cwd();
-f.list('A', '*.js').forEach(ff => {
+// f = File.cwd();
+// f.list('A', '*.js').forEach(ff => {
+//     console.log(`ff: ${ff} ==> ${ff.name}`);
+// });
+
+var fd = File.cwd().join('foo');
+fd.mkdir();
+
+File.cwd().list('A', ff => {
+    console.log(`ff: ${ff}`);
+});
+
+// console.log(`rm ${fd}`);
+// fd.remove();
+// File.cwd().list('A', ff => {
+//     console.log(`ff: ${ff}`);
+// });
+
+f = fd.join('foo.json');
+f.save(pkg, 'json5');
+f.parent.list('A', '*.json').forEach(ff => {
     console.log(`ff: ${ff} ==> ${ff.name}`);
 });
+
+console.log(`rm ${f.name}`);
+f.remove();
+f.parent.list('A', '*.json').forEach(ff => {
+    console.log(`ff: ${ff} ==> ${ff.name}`);
+});
+
+//f.save(pkg, 'json5');
+fd.asyncRemove().then(ff => {
+    console.log(`ff: ${ff}`);
+    File.cwd().list('A', cc => {
+        console.log(`cc: ${cc}`);
+    });
+},
+e => {
+    console.log('rm err:', e.message);
+});
+
 // f.list('A', (name, f2) => { console.log('f2',f2); return name.endsWith('.js'); }).forEach(ff => {
 //     console.log(`ff: ${ff} ==> ${ff.name}`);
 // });
 
-f.walk('A', '**/*.{js,json}', ff => {
-    console.log(`walk: ${ff}`)
-});
+// f.walk('A', '**/*.{js,json}', ff => {
+//     console.log(`walk: ${ff}`)
+// });
 
 // f = new File('~~/.sencha');
 // console.log(`f: ${f}`);
