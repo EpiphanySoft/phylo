@@ -12,10 +12,10 @@ Consider some examples:
     
     var pkg = File.cwd().upToFile('package.json').load();
 
-The `root` value is by looking for a directory with a `'.git'` file or folder in
-it, starting at `cwd` and climbing up as necessary. When that location is found, 
-it is returned as a `File` object. Note, this is not the `'.git'` folder itself,
-but the folder that _contains_ the `'.git'` folder (that is, the VCS root).
+The `root` value is determined by looking for a directory with a `'.git'` file or
+folder in it, starting at `cwd` and climbing up as necessary. When that location is
+found, it is returned as a `File` object. Note, this is not the `'.git'` folder
+itself, but the folder that _contains_ the `'.git'` folder (that is, the VCS root).
 
 The `pkg` value is determined in a similar manner but with two differences. The
 first is that the location for which we are searching must contain a _file_ (not
