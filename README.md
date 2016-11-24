@@ -967,3 +967,5 @@ would be simpler, easier and more productive by using synchronous API's.
 If your context does not prevent it, they are certainly the way to go!
 
 Enjoy!
+
+Copyright (c) 2016 [Donald Griffin](https://github.com/dongryphon)
