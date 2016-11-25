@@ -62,9 +62,9 @@ function detildify (p) {
  * the string form and one that returns a `File`. In general, it is safest/best to stay
  * in the realm of `File` objects so their names are more concise.
  *
- *      var absFile = file.absolutify();  // a File object
+ *      let absFile = file.absolutify();  // a File object
  *
- *      var absPath = file.absolutePath(); // a string
+ *      let absPath = file.absolutePath(); // a string
  *
  * ### Synchronous vs Asynchronous
  *
@@ -72,7 +72,7 @@ function detildify (p) {
  * example, the `stat` method is synchronous while the asynchronous version is
  * `asyncStat`.
  *
- *      var st = file.stat();  // sync
+ *      let st = file.stat();  // sync
  *
  *      file.asyncStat().then(st => {
  *          // async
@@ -103,9 +103,9 @@ class File {
      * When no arguments are passed the first result is cached (since one temp dir is
      * often sufficient for a process).
      *
-     *      var temp;
-     *      var temp2;
-     *      var temp3;
+     *      let temp;
+     *      let temp2;
+     *      let temp3;
      *
      *      File.asyncTemp().then(t => temp = t);   // generates temp dir
      *      File.asyncTemp().then(t => temp2 = t);  // same dir (temp2 === temp)
@@ -120,8 +120,8 @@ class File {
      * @return {Promise<File>}
      */
     static asyncTemp (options) {
-        var cached = File._temp;
-        var useCache = (options === undefined);
+        let cached = File._temp;
+        let useCache = (options === undefined);
 
         if (cached && useCache) {
             return Promise.resolve(cached);
@@ -162,7 +162,7 @@ class File {
      * @return {Boolean} `true` if the file exists.
      */
     static exists (filePath) {
-        var st = File.stat(filePath);
+        let st = File.stat(filePath);
 
         return !st.error;
     }
@@ -173,7 +173,7 @@ class File {
      * @return {File} The `File` instance.
      */
     static from (filePath) {
-        var file = filePath || null;
+        let file = filePath || null;
 
         if (file && !file.$isFile) {
             file = new this(filePath);
@@ -255,7 +255,7 @@ class File {
      * @return {File} The `File` instance from the resulting path.
      */
     static join (...parts) {
-        var f = File.joinPath(...parts);
+        let f = File.joinPath(...parts);
         return new File(f);
     }
 
@@ -315,7 +315,7 @@ class File {
             throw new Error('Must provide company name to isolate profile data');
         }
 
-        var fn = File.profilers[platform] || File.profilers.default;
+        let fn = File.profilers[platform] || File.profilers.default;
 
         return fn(File.home(), company);
     }
@@ -327,7 +327,7 @@ class File {
      * @return {File} The `File` instance.
      */
     static resolve (...parts) {
-        var f = File.resolvePath(...parts);
+        let f = File.resolvePath(...parts);
         return new File(f);
     }
 
@@ -369,7 +369,7 @@ class File {
      * @return {Number}
      */
     static sorter (filePath1, filePath2) {
-        var a = File.from(filePath1);
+        let a = File.from(filePath1);
         return a.compare(filePath2, 'd');
     }
 
@@ -381,7 +381,7 @@ class File {
      * @return {Number}
      */
     static sorterFilesFirst (filePath1, filePath2) {
-        var a = File.from(filePath1);
+        let a = File.from(filePath1);
         return a.compare(filePath2, 'f');
     }
 
@@ -393,7 +393,7 @@ class File {
      * @return {Number}
      */
     static sorterByPath (filePath1, filePath2) {
-        var a = File.from(filePath1);
+        let a = File.from(filePath1);
         return a.compare(filePath2, false);
     }
 
@@ -406,7 +406,7 @@ class File {
      * @return {fs.Stats}
      */
     static stat (filePath) {
-        var f = File.from(filePath);
+        let f = File.from(filePath);
 
         if (!f) {
             return Stat.getError('ENOENT');
@@ -421,18 +421,18 @@ class File {
      * When no arguments are passed the first result is cached (since one temp dir is
      * often sufficient for a process).
      *
-     *      var temp = File.temp();  // generates temp dir
+     *      let temp = File.temp();  // generates temp dir
      *
-     *      var temp2 = File.temp();  // === temp
+     *      let temp2 = File.temp();  // === temp
      *
-     *      var temp3 = File.temp(null);  // new call to tmp.dirSync()
+     *      let temp3 = File.temp(null);  // new call to tmp.dirSync()
      *
      * @param {Object} [options] Options for `dirSync()` from the `tmp` module.
      * @return {File}
      */
     static temp (options) {
-        var result = File._temp;
-        var useCache = (options === undefined);
+        let result = File._temp;
+        let useCache = (options === undefined);
 
         if (!result || !useCache) {
             result = Tmp.dirSync(options);
@@ -467,7 +467,7 @@ class File {
      * Typically known as `basename` on unix-like systems.
      */
     get name () {
-        var name = this._name;
+        let name = this._name;
 
         if (name === undefined) {
             let index = this.lastSeparator();
@@ -486,7 +486,7 @@ class File {
      * Typically known as `dirname` on unix-like systems.
      */
     get parent () {
-        var parent = this._parent;
+        let parent = this._parent;
 
         if (parent === undefined) {
             let path = this.path;
@@ -517,7 +517,7 @@ class File {
      * the `extent` is "js". Returns `''` for files with no extension (e.g. README).
      */
     get extent () {
-        var ext = this._extent;
+        let ext = this._extent;
 
         if (ext === undefined) {
             let name = this.name;
@@ -609,7 +609,7 @@ class File {
     }
 
     lastSeparator () {
-        var path = this.path,
+        let path = this.path,
             i = path.lastIndexOf('/');
 
         if (File.Win) {
@@ -621,7 +621,7 @@ class File {
     }
 
     nativePath (separator) {
-        var p = this.path;
+        let p = this.path;
 
         return p && p.replace(re.split, separator || File.separator);
     }
@@ -635,7 +635,7 @@ class File {
     }
 
     normalizedPath () {
-        var p = this.path;
+        let p = this.path;
         return p && Path.normalize(p);
     }
 
@@ -779,7 +779,7 @@ class File {
     }
 
     isAbsolute () {
-        var p = this.path;
+        let p = this.path;
         return p ? re.abs.test(p) || Path.isAbsolute(p) : false;
     }
 
@@ -819,7 +819,7 @@ class File {
      * the file does not exist, or some other error is encountered, the `error` property
      * will be set.
      *
-     *      var acc = File.from(s).access();
+     *      let acc = File.from(s).access();
      *
      *      if (acc.rw) {
      *          // file at location s has R and W permission
@@ -840,7 +840,7 @@ class File {
      * @return {File.Access}
      */
     access () {
-        var st = this.stat();
+        let st = this.stat();
 
         if (st.error) {
             return Access.getError(st.error);
@@ -855,7 +855,7 @@ class File {
      * @return {Boolean}
      */
     can (mode) {
-        var acc = this.access();
+        let acc = this.access();
 
         return acc[mode];
     }
@@ -865,7 +865,7 @@ class File {
      * @return {Boolean}
      */
     exists () {
-        var st = this.stat();
+        let st = this.stat();
         return !st.error;
     }
 
@@ -875,7 +875,7 @@ class File {
      * @return {Boolean}
      */
     has (rel) {
-        var f = this.resolve(rel);
+        let f = this.resolve(rel);
         return f.exists();
     }
 
@@ -885,7 +885,7 @@ class File {
      * @return {Boolean}
      */
     hasDir (rel) {
-        var f = this.resolve(rel);
+        let f = this.resolve(rel);
 
         return f.isDir();
     }
@@ -896,7 +896,7 @@ class File {
      * @return {Boolean}
      */
     hasFile (rel) {
-        var f = this.join(rel);
+        let f = this.join(rel);
 
         return f.isFile();
     }
@@ -917,7 +917,7 @@ class File {
         }
 
         if (File.Win) {
-            var st = this.stat();
+            let st = this.stat();
 
             return st.attrib.H; // if we got an error, H will be false
         }
@@ -953,7 +953,7 @@ class File {
     /**
      * Return the `[fs.Stats](https://nodejs.org/api/fs.html#fs_class_fs_stats)`.
      *
-     *      var st = File.from(s).stat();
+     *      let st = File.from(s).stat();
      *
      *      if (st) {
      *          // file exists...
@@ -1383,7 +1383,7 @@ class File {
             mode = '';
         }
 
-        var listMode = ListMode.get(mode);
+        let listMode = ListMode.get(mode);
 
         // If matcher is a String, we'll get a default globber compile. If it is a
         // RegExp or a Function, those things are already baked in. In all cases, we
@@ -1391,7 +1391,7 @@ class File {
         let test = Globber.from(matcher);
 
         return new Promise((resolve, reject) => {
-            var fail = e => {
+            let fail = e => {
                 if (listMode.T) {
                     if (reject) {
                         reject(e);
@@ -1404,7 +1404,7 @@ class File {
                 reject = resolve = null;
             };
 
-            var finish = () => {
+            let finish = () => {
                 if (!resolve) {
                     return;
                 }
@@ -1442,7 +1442,7 @@ class File {
                 resolve = null;
             };
 
-            var result = [];
+            let result = [];
 
             Fs.readdir(this.fspath, (err, names) => {
                 if (err) {
@@ -1455,7 +1455,7 @@ class File {
                     return;
                 }
 
-                var promises = [];
+                let promises = [];
 
                 names.forEach(name => {
                     let f = new File(this, name);
@@ -1601,9 +1601,9 @@ class File {
             mode = '';
         }
 
-        var listMode = ListMode.get(mode);
-        var ret = [];
-        var names;
+        let listMode = ListMode.get(mode);
+        let ret = [];
+        let names;
 
         if (listMode.T) {
             names = Fs.readdirSync(this.fspath);
@@ -1706,7 +1706,7 @@ class File {
      * @return {Promise<File>} this
      */
     asyncRemove (options) {
-        var opt = RemoveOptions.get(options);
+        let opt = RemoveOptions.get(options);
 
         return this.asyncStatLink().then(st => {
             if (st.error) {
@@ -1742,7 +1742,7 @@ class File {
      * @chainable
      */
     remove (options) {
-        var opt = RemoveOptions.get(options);
+        let opt = RemoveOptions.get(options);
 
         if (this.exists()) {
             if (opt.r) {
@@ -1769,7 +1769,7 @@ class File {
             dir: this.fspath
         }, options);
 
-        var result = Tmp.tmpNameSync(options);
+        let result = Tmp.tmpNameSync(options);
 
         return File.from(result);
     }
@@ -1939,8 +1939,8 @@ class File {
             mode = '';
         }
 
-        var fn = (typeof test === 'string') ? f => f.has(test) : test;
-        var ret = [];
+        let fn = (typeof test === 'string') ? f => f.has(test) : test;
+        let ret = [];
 
         return this.asyncWalk(mode, (f, state) => {
             // If fn throws that is OK since asyncWalk has a try/catch to map it
@@ -1993,7 +1993,7 @@ class File {
      *
      * For example:
      *
-     *      var packageDirs = dir.tips('package.json');
+     *      let packageDirs = dir.tips('package.json');
      *
      * Finds all folders at "dir" or below that matches `has('package.json')`. When such
      * folders are found, no further descent is performed. In this case that will avoid
@@ -2015,8 +2015,8 @@ class File {
             mode = '';
         }
 
-        var fn = (typeof test === 'string') ? f => f.has(test) : test;
-        var ret = [];
+        let fn = (typeof test === 'string') ? f => f.has(test) : test;
+        let ret = [];
 
         this.walk(mode, (f, state) => {
             if (fn(f, state)) {
@@ -2068,7 +2068,7 @@ class File {
     //------------------------------------------------------------------------
 
     _async (name, fn) {
-        var pending = this[name];
+        let pending = this[name];
 
         if (!pending) {
             this[name] = pending = fn().then(result => {
@@ -2576,15 +2576,15 @@ Options.prototype.isOptions = true;
  * method:
  *
  *      // Basic mode:
- *      var txtRe = File.glob('*.txt');
+ *      let txtRe = File.glob('*.txt');
  *
- *      var wwwJsOrHtml = File.glob('* /www/{*.js,*.html}');
+ *      let wwwJsOrHtml = File.glob('* /www/{*.js,*.html}');
  *
  *      // With paths:
- *      var allTxtRe = File.glob('** /*.txt');
+ *      let allTxtRe = File.glob('** /*.txt');
  *
  *      // Greedy wildcards and simple globs:
- *      var allTxtRe = File.glob('* /*.txt', 'GS');
+ *      let allTxtRe = File.glob('* /*.txt', 'GS');
  *
  * ## Case-Sensitivity ("C")
  *
@@ -2639,12 +2639,12 @@ class Globber extends Options {
     }
 
     compile (glob) {
-        var str = String(glob);
-        var inGroup = false; // true when in a group (eg {*.html,*.js})
-        var reStr = "";
-        var a, c, prevChar, starCount, nextChar, isGlobstar;
+        let str = String(glob);
+        let inGroup = false; // true when in a group (eg {*.html,*.js})
+        let reStr = "";
+        let a, c, prevChar, starCount, nextChar, isGlobstar;
 
-        for (var i = 0, len = str.length; i < len; i++) {
+        for (let i = 0, len = str.length; i < len; i++) {
             c = str[i];
 
             if (!this.S) {
@@ -3039,7 +3039,7 @@ File.Driver = class {
     }
 
     extend (config) {
-        var ret = Object.create(this);
+        let ret = Object.create(this);
 
         if (config) {
             Object.assign(ret, config);
@@ -3059,7 +3059,7 @@ File.Driver = class {
     }
 
     getOptions (options) {
-        var ret = this.options;
+        let ret = this.options;
 
         if (options) {
             ret = Object.assign(Object.assign({}, ret), options);
@@ -3106,13 +3106,13 @@ File.Reader = class extends File.Driver {
     }
 
     load (filename) {
-        var data = this.read(filename);
+        let data = this.read(filename);
 
         return this._parse(filename, data);
     }
 
     parse (data) {
-        var split = this.split;
+        let split = this.split;
 
         if (split) {
             data = data.split(split);
@@ -3219,7 +3219,7 @@ File.Writer = class extends File.Driver {
     }
 
     serialize (data) {
-        var join = this.join;
+        let join = this.join;
 
         if (join != null && Array.isArray(data)) {
             data = data.join(join);
@@ -3233,7 +3233,7 @@ File.Writer = class extends File.Driver {
     }
 
     save (filename, data) {
-        var content = this._serialize(data);
+        let content = this._serialize(data);
 
         this.write(filename, content);
     }
@@ -3312,7 +3312,7 @@ File.writers.json5 = File.writers.json.extend({
 class Win {
     static asyncAttrib (path) {
         return new Promise(resolve => {
-            var process = results => {
+            let process = results => {
                 if (results) {
                     resolve(Attribute.get(results));
                 }
@@ -3331,7 +3331,7 @@ class Win {
 
     static attrib (path) {
         try {
-            var attr = fswin.getAttributesSync(path);
+            let attr = fswin.getAttributesSync(path);
             return Attribute.get(attr);
         }
         catch (e) {
