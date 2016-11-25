@@ -1,30 +1,45 @@
 {
-  "name": "phylo",
-  "version": "1.0.0-beta.4",
-  "description": "File operations class",
-  "main": "File.js",
-  "scripts": {
-    "test": "test"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/dongryphon/phylo.git"
-  },
-  "keywords": [
-    "file",
-    "path"
-  ],
-  "author": "dongryphon (Don Griffin)",
-  "license": "MIT",
-  "bugs": {
-    "url": "https://github.com/dongryphon/phylo/issues"
-  },
-  "homepage": "https://github.com/dongryphon/phylo#readme",
-  "dependencies": {
-    "fswin": "^2.16.1102",
-    "json5": "^0.5.0",
-    "mkdirp": "^0.5.1",
-    "rimraf": "^2.5.4",
-    "tmp": "0.0.30"
-  }
+    "name": "phylo",
+    "version": "1.0.0-beta.4",
+    "description": "File operations class",
+    "main": "File.js",
+    "scripts": {
+        "test": "gulp test"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/dongryphon/phylo.git"
+    },
+    "keywords": [
+        "file",
+        "fs",
+        "glob",
+        "path"
+    ],
+    "author": "dongryphon (Don Griffin)",
+    "license": "MIT",
+    "bugs": {
+        "url": "https://github.com/dongryphon/phylo/issues"
+    },
+    "homepage": "https://github.com/dongryphon/phylo#readme",
+    "dependencies": {
+        "fswin": "^2.16.1102",
+        "json5": "^0.5.0",
+        "mkdirp": "^0.5.1",
+        "rimraf": "^2.5.4",
+        "tmp": "0.0.30"
+    },
+    "devDependencies": {
+        "expect.js": "^0.3.1",
+        "gulp": "^3.9.1",
+        "gulp-coveralls": "^0.1.4",
+        "gulp-eslint": "^3.0.1",
+        "gulp-exclude-gitignore": "^1.0.0",
+        "gulp-istanbul": "^1.1.1",
+        "gulp-mocha": "^3.0.1",
+        "gulp-nsp": "^2.4.2",
+        "gulp-plumber": "^1.1.0",
+        "istanbul": "^0.4.5",
+        "mocha": "^3.1.0"
+    }
 }

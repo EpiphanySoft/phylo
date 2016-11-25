@@ -18,8 +18,8 @@ first is that the location for which we are searching must contain a _file_ (not
 a _folder_) with the name `'package.json'`. Secondly, it is the `'package.json'`
 file that is returned as a `File` instance, not the location that contained it.
 
-The `load()` method will read the file and parse the contents into an object based
-on the `'.json'` file type.
+The `load()` method will read the file and parse the contents into an object (since
+the file is type `'.json'`).
 
 If you like infinite loops, you can try this on Windows:
 
@@ -153,7 +153,7 @@ You can compare two paths in a few different ways:
 There are some static sort methods that can be used by `Array.sort()`:
 
  - `File.sorter` - Calls `f1.compare(f2, 'd')` to group directories before files.
- - `File.sorterFilesFirst` - Calls `f1.compare(f2, 'df)` to group files first.
+ - `File.sorterFilesFirst` - Calls `f1.compare(f2, 'f')` to group files first.
  - `File.sorterByPath` - Calls `f1.compare(f2, false)` to sort only by path.
 
 File name comparisons are case-insensitive on Windows and Mac OS X, so we have

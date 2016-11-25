@@ -1,6 +1,5 @@
 'use strict';
 
-// TODO rm -rf
 // TODO sanitize
 
 const Fs = require('fs');
