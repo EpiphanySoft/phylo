@@ -54,4 +54,20 @@ describe('Path manipulation', () => {
             expect(s).to.be(p);
         });
     });
+
+    describe('name property', () => {
+        //TODO
+    });
+
+    describe('parent property', () => {
+        //TODO
+    });
+
+    describe('extent property', () => {
+        //TODO
+    });
+
+    describe('fspath property', () => {
+        //TODO
+    });
 });

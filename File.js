@@ -27,27 +27,6 @@ const re = {
     split: isWin ? /[\/\\]/g : /[\/]/g
 };
 
-function detildify (p) {
-    if (p) {
-        if (p === '~') {
-            p = OS.homedir();
-        }
-        else if (p === '~~') {
-            p = File.profile().path;
-        }
-        else if (re.homey.test(p)) {
-            // if (p starts with "~/" or "~\\")
-            p = Path.join(OS.homedir(), p.substr(1));
-        }
-        else if (re.profile.test(p)) {
-            // if (p starts with "~~/" or "~~\\")
-            p = File.profile().join(p.substr(2)).path;
-        }
-    }
-
-    return p;
-}
-
 //================================================================================
 
 /**
@@ -251,7 +230,7 @@ class File {
     /**
      * This method is the same as `join()` in the `path` module except that the items
      * can be `File` instances or `String` and a `File` instance is returned.
-     * @param {File.../String...} parts Path pieces to join using `path.join()`.
+     * @param {File.../String...} parts Name fragments to join using `path.join()`.
      * @return {File} The `File` instance from the resulting path.
      */
     static join (...parts) {
@@ -262,7 +241,7 @@ class File {
     /**
      * This method is the same as `join()` in the `path` module except that the items
      * can be `File` instances or `String`.
-     * @param {File.../String...} parts Path pieces to join using `path.join()`.
+     * @param {File.../String...} parts Name fragments to join using `path.join()`.
      * @return {String} The resulting path.
      */
     static joinPath (...parts) {
@@ -276,7 +255,7 @@ class File {
             }
         }
 
-        let ret = (n === 1) ? parts[0] : (n && Path.join(...parts));
+        let ret = (n === 1) ? parts[0] : (n && File._p.join(...parts));
 
         return ret || '';
     }
@@ -323,7 +302,7 @@ class File {
     /**
      * This method is the same as `resolve()` in the `path` module except that the items
      * can be `File` instances or `String` and a `File` instance is returned.
-     * @param {File.../String...} parts Path pieces to resolve using `path.resolve()`.
+     * @param {File.../String...} parts Name fragments to resolve using `path.resolve()`.
      * @return {File} The `File` instance.
      */
     static resolve (...parts) {
@@ -334,7 +313,7 @@ class File {
     /**
      * This method is the same as `resolve()` in the `path` module except that the items
      * can be `File` instances or `String`.
-     * @param {File.../String...} parts Path pieces to resolve using `path.resolve()`.
+     * @param {File.../String...} parts Name fragments to resolve using `path.resolve()`.
      * @return {String} The resulting path.
      */
     static resolvePath (...parts) {
@@ -345,10 +324,10 @@ class File {
                 p = p.path;
             }
 
-            parts[i] = detildify(p);
+            parts[i] = File._detildify(p);
         }
 
-        return (parts && parts.length && Path.resolve(...parts)) || '';
+        return (parts && parts.length && File._p.resolve(...parts)) || '';
     }
 
     /**
@@ -536,7 +515,7 @@ class File {
      * useful for `fs` module calls.
      */
     get fspath () {
-        return detildify(this.path);
+        return File._detildify(this.path);
     }
 
     //-----------------------------------------------------------------
@@ -636,7 +615,7 @@ class File {
 
     normalizedPath () {
         let p = this.path;
-        return p && Path.normalize(p);
+        return p && File._p.normalize(p);
     }
 
     relativePath (path) {
@@ -646,7 +625,7 @@ class File {
 
         let p = this.absolutePath();
 
-        return p && path && Path.relative(p, path);
+        return p && path && File._p.relative(p, path);
     }
 
     relativize (path) {
@@ -780,7 +759,7 @@ class File {
 
     isAbsolute () {
         let p = this.path;
-        return p ? re.abs.test(p) || Path.isAbsolute(p) : false;
+        return p ? re.abs.test(p) || File._p.isAbsolute(p) : false;
     }
 
     isRelative () {
@@ -2080,8 +2059,28 @@ class File {
         return pending;
     }
 
-} // class File
+    static _detildify (p) {
+        if (p) {
+            if (p === '~') {
+                p = OS.homedir();
+            }
+            else if (p === '~~') {
+                p = File.profile().path;
+            }
+            else if (re.homey.test(p)) {
+                // if (p starts with "~/" or "~\\")
+                p = File._p.join(OS.homedir(), p.substr(1));
+            }
+            else if (re.profile.test(p)) {
+                // if (p starts with "~~/" or "~~\\")
+                p = File.profile().join(p.substr(2)).path;
+            }
+        }
 
+        return p;
+    }
+
+} // class File
 const proto = File.prototype;
 
 Object.assign(proto, {
@@ -2099,7 +2098,18 @@ File.NOCASE = isWin || isMac;
 
 File.isDirectory = File.isDir;
 File.re = re;
+
 File.separator = Path.sep;
+
+// These are the only pieces of the path module that we use so we copy them to the
+// File constructor so they can be replaced:
+File._p = {
+    join: Path.join,
+    relative: Path.relative,
+    resolve: Path.resolve,
+    normalize: Path.normalize,
+    isAbsolute: Path.isAbsolute
+};
 
 File.profilers = {
     default (home, company) {
