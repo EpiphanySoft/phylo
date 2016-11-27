@@ -35,11 +35,10 @@ const re = {
  *
  * ## Naming Conventions
  *
- * Since it can be confusing when a string is returned or a `File` instance, a naming
- * convention is used throughout. Any method that ends with "Path" returns a string,
- * while all other methods return a `File`. Methods often come in pairs: one that returns
- * the string form and one that returns a `File`. In general, it is safest/best to stay
- * in the realm of `File` objects so their names are more concise.
+ * Any method that ends with "Path" returns a string, while all other methods return a
+ * `File` (where appropriate). Methods often come in pairs: one that returns the result
+ * as a String and one that returns a `File`. Since it is best to stay in the realm of
+ * `File` objects, their names are the more concise.
  *
  *      let absFile = file.absolutify();  // a File object
  *
@@ -47,9 +46,9 @@ const re = {
  *
  * ### Synchronous vs Asynchronous
  *
- * All async methods return promises and have names that look like `asyncFoo()`. For
- * example, the `stat` method is synchronous while the asynchronous version is
- * `asyncStat`.
+ * All async methods return promises and have names that begin with "async" (for example,
+ * `asyncFoo()`). Consider the `stat` method. It is synchronous while the asynchronous
+ * version is`asyncStat`.
  *
  *      let st = file.stat();  // sync
  *
@@ -2174,6 +2173,7 @@ class File {
                 opts.path = options;
             }
 
+            //TODO handle ~/foo in path
             if (Array.isArray(opts.path)) {
                 opts.path = opts.path.join(this.Win ? ';' : ':');
             }
