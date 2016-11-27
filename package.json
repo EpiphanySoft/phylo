@@ -27,7 +27,8 @@
         "json5": "^0.5.0",
         "mkdirp": "^0.5.1",
         "rimraf": "^2.5.4",
-        "tmp": "0.0.30"
+        "tmp": "0.0.30",
+        "which": "^1.2.12"
     },
     "devDependencies": {
         "expect.js": "^0.3.1",

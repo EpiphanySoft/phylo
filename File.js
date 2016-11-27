@@ -9,6 +9,7 @@ const $os =     require('os');
 const $path =   require('path');
 const $rimraf = require('rimraf');
 const $tmp =    require('tmp');
+const $which =  require('which');
 
 const platform = $os.platform();
 
@@ -106,7 +107,7 @@ class File {
         }
 
         return new Promise((resolve, reject) => {
-            this._tmp.dir(options, (err, name) => {
+            this.$tmp.dir(options, (err, name) => {
                 if (err) {
                     reject(err);
                 }
@@ -121,6 +122,39 @@ class File {
                     }
 
                     resolve(f);
+                }
+            });
+        });
+    }
+
+    /**
+     * Attempts to find the given program by its `name` in the system **PATH**. If it is
+     * found, a `File` instance is resolved. If not, `null` is resolved. If an error
+     * occurs, the promise will reject accordingly.
+     *
+     * @param {String} name The name of the program to find.
+     * @param {Object/String/String[]} options Options to control the process or a
+     * replacement value for the PATH as a string or array of strings.
+     * @param {String/String[]} options.path A replacement PATH
+     * @param {String} options.pathExt On Windows, this overrides the **PATHEXT**
+     * environment variable (normally, '.EXE;.CMD;.BAT;.COM').
+     * @return {Promise<File>}
+     */
+    static asyncWhich (name, options) {
+        let opts = this._whichOptions(options);
+
+        return new Promise((resolve, reject) => {
+            $which(name, opts, (err, result) => {
+                if (err) {
+                    if (err.code === 'ENOENT') {
+                        resolve(null);
+                    }
+                    else {
+                        reject(err);
+                    }
+                }
+                else {
+                    resolve(this.from(result));
                 }
             });
         });
@@ -197,7 +231,7 @@ class File {
      * @return {File} The `os.homedir()` as a `File` instance.
      */
     static home () {
-        return new this(this._os.homedir());
+        return new this(this.$os.homedir());
     }
 
     /**
@@ -254,7 +288,7 @@ class File {
             }
         }
 
-        let ret = (n === 1) ? parts[0] : (n && this._pth.join(...parts));
+        let ret = (n === 1) ? parts[0] : (n && this.$path.join(...parts));
 
         return ret || '';
     }
@@ -326,7 +360,7 @@ class File {
             parts[i] = this._detildify(p);
         }
 
-        return (parts && parts.length && this._pth.resolve(...parts)) || '';
+        return (parts && parts.length && this.$path.resolve(...parts)) || '';
     }
 
     /**
@@ -416,7 +450,7 @@ class File {
             return this._temp;
         }
 
-        let result = this._tmp.dirSync(options);
+        let result = this.$tmp.dirSync(options);
 
         result = this.from(result.name);
 
@@ -425,6 +459,35 @@ class File {
         }
 
         return result;
+    }
+
+    /**
+     * Attempts to find the given program by its `name` in the system **PATH**. If it is
+     * found, a `File` instance is returned. If not, `null` is returns. If an error
+     * occurs, an `Error` is thrown accordingly.
+     *
+     * @param {String} name The name of the program to find.
+     * @param {Object/String/String[]} options Options to control the process or a
+     * replacement value for the PATH as a string or array of strings.
+     * @param {String/String[]} options.path A replacement PATH
+     * @param {String} options.pathExt On Windows, this overrides the **PATHEXT**
+     * environment variable (normally, '.EXE;.CMD;.BAT;.COM').
+     * @return {File}
+     */
+    static which (name, options) {
+        let opts = this._whichOptions(options);
+
+        try {
+            // throws on not found...
+            return this.from($which.sync(name, opts));
+        }
+        catch (e) {
+            if (e.code === 'ENOENT') {
+                return null;
+            }
+
+            throw e;
+        }
     }
 
     //-----------------------------------------------------------------
@@ -475,7 +538,7 @@ class File {
             let ret;
 
             if (sep < 0) {
-                ret = this._pth.resolve(path, '..');
+                ret = this.$path.resolve(path, '..');
 
                 if (path === ret) {
                     ret = null;
@@ -544,7 +607,7 @@ class File {
         let path = this.absolutePath();
 
         return new Promise(resolve => {
-            this._fs.realpath(path, (err, result) => {
+            this.$fs.realpath(path, (err, result) => {
                 if (err) {
                     resolve(null);
                 }
@@ -567,7 +630,7 @@ class File {
      */
     canonicalPath () {
         try {
-            return this._fs.realpathSync(this.absolutePath());
+            return this.$fs.realpathSync(this.absolutePath());
         } catch (e) {
             return null;
         }
@@ -617,7 +680,7 @@ class File {
 
     normalizedPath () {
         let p = this.path;
-        return p && this._pth.normalize(p);
+        return p && this.$path.normalize(p);
     }
 
     relativePath (path) {
@@ -627,7 +690,7 @@ class File {
 
         let p = this.absolutePath();
 
-        return p && path && this._pth.relative(p, path);
+        return p && path && this.$path.relative(p, path);
     }
 
     relativize (path) {
@@ -761,7 +824,7 @@ class File {
 
     isAbsolute () {
         let p = this.path;
-        return p ? re.abs.test(p) || this._pth.isAbsolute(p) : false;
+        return p ? re.abs.test(p) || this.$path.isAbsolute(p) : false;
     }
 
     isRelative () {
@@ -957,7 +1020,7 @@ class File {
             let path = this.fspath;
 
             try {
-                st = this._fs.statSync(path);
+                st = this.$fs.statSync(path);
 
                 let Win = this.constructor.Win;
                 st.attrib = Win ? Win.attrib(path) : this.constructor.Attribute.NULL;
@@ -992,7 +1055,7 @@ class File {
             let path = this.fspath;
 
             try {
-                st = this._fs.lstatSync(path);
+                st = this.$fs.lstatSync(path);
 
                 let Win = this.constructor.Win;
                 st.attrib = Win ? Win.attrib(path) : this.constructor.Attribute.NULL;
@@ -1272,7 +1335,7 @@ class File {
 
         return this._async('_asyncStat', () => {
             return new Promise(resolve => {
-                this._fs.stat(path, (err, st) => {
+                this.$fs.stat(path, (err, st) => {
                     if (err) {
                         resolve(F.Stat.getError(err));
                     }
@@ -1329,7 +1392,7 @@ class File {
 
         return this._async('_asyncStatLink', () => {
             return new Promise(resolve => {
-                this._fs.lstat(path, (err, st) => {
+                this.$fs.lstat(path, (err, st) => {
                     if (err) {
                         resolve(F.Stat.getError(err));
                     }
@@ -1438,7 +1501,7 @@ class File {
 
             let result = [];
 
-            this._fs.readdir(this.fspath, (err, names) => {
+            this.$fs.readdir(this.fspath, (err, names) => {
                 if (err) {
                     if (listMode.T) {
                         reject(err);
@@ -1519,7 +1582,7 @@ class File {
         }, options);
 
         return new Promise((resolve, reject) => {
-            this._tmp.tmpName(options, (err, name) => {
+            this.$tmp.tmpName(options, (err, name) => {
                 if (err) {
                     reject(err);
                 }
@@ -1601,11 +1664,11 @@ class File {
         let names;
 
         if (listMode.T) {
-            names = this._fs.readdirSync(this.fspath);
+            names = this.$fs.readdirSync(this.fspath);
         }
         else {
             try {
-                names = this._fs.readdirSync(this.fspath);
+                names = this.$fs.readdirSync(this.fspath);
             }
             catch (e) {
                 return null;
@@ -1667,7 +1730,7 @@ class File {
      * @chainable
      */
     mkdir (mode) {
-        this._md.mkdirpSync(this.fspath, {
+        this.$md.mkdirpSync(this.fspath, {
             mode: mode
         });
 
@@ -1684,7 +1747,7 @@ class File {
      */
     asyncMkdir (mode) {
         return new Promise((resolve, reject) => {
-            this._md.mkdirp(this.fspath, { mode: mode }, err => {
+            this.$md.mkdirp(this.fspath, { mode: mode }, err => {
                 if (err) {
                     reject(err);
                 }
@@ -1718,13 +1781,13 @@ class File {
                 };
 
                 if (opt.r) {
-                    this._rm.rimraf(this.fspath, callback);
+                    this.$rm.rimraf(this.fspath, callback);
                 }
                 else if (st.isDirectory()) {
-                    this._fs.rmdir(this.fspath, callback);
+                    this.$fs.rmdir(this.fspath, callback);
                 }
                 else {
-                    this._fs.unlink(this.fspath, callback);
+                    this.$fs.unlink(this.fspath, callback);
                 }
             });
         });
@@ -1741,13 +1804,13 @@ class File {
 
         if (this.exists()) {
             if (opt.r) {
-                this._rm.rimrafSync(this.fspath);
+                this.$rm.rimrafSync(this.fspath);
             }
             else if (this.isDir()) {
-                this._fs.rmdirSync(this.fspath);
+                this.$fs.rmdirSync(this.fspath);
             }
             else {
-                this._fs.unlinkSync(this.fspath);
+                this.$fs.unlinkSync(this.fspath);
             }
         }
 
@@ -1764,7 +1827,7 @@ class File {
             dir: this.fspath
         }, options);
 
-        let result = this._tmp.tmpNameSync(options);
+        let result = this.$tmp.tmpNameSync(options);
 
         return this.constructor.from(result);
     }
@@ -2078,14 +2141,14 @@ class File {
     static _detildify (p) {
         if (p) {
             if (p === '~') {
-                p = this._os.homedir();
+                p = this.$os.homedir();
             }
             else if (p === '~~') {
                 p = this.profile().path;
             }
             else if (re.homey.test(p)) {
                 // if (p starts with "~/" or "~\\")
-                p = this._pth.join(this._os.homedir(), p.substr(1));
+                p = this.$path.join(this.$os.homedir(), p.substr(1));
             }
             else if (re.profile.test(p)) {
                 // if (p starts with "~~/" or "~~\\")
@@ -2094,6 +2157,29 @@ class File {
         }
 
         return p;
+    }
+
+    static _whichOptions (options) {
+        let opts = {};
+
+        if (this.Win) {
+            opts.pathExt = (process.env.PATHEXT || '.EXE;.CMD;.BAT;.COM').toLowerCase();
+        }
+
+        if (options) {
+            if (options.constructor === Object) {
+                Object.assign(opts, options);
+            }
+            else {
+                opts.path = options;
+            }
+
+            if (Array.isArray(opts.path)) {
+                opts.path = opts.path.join(this.Win ? ';' : ':');
+            }
+        }
+
+        return opts;
     }
 
 } // class File
@@ -2119,7 +2205,7 @@ File.separator = $path.sep;
 
 // These are the only pieces of the fs and path module that we use so we copy them to
 // objects for easy overriding.
-File._fs = File.prototype._fs = {
+File.$fs = File.prototype.$fs = {
     realpath: $fs.realpath,
     realpathSync: $fs.realpathSync,
     statSync: $fs.statSync,
@@ -2138,16 +2224,16 @@ File._fs = File.prototype._fs = {
     writeFileSync: $fs.writeFileSync
 };
 
-File._md = File.prototype._md = {
+File.$md = File.prototype.$md = {
     mkdirp: $mkdirp,
     mkdirpSync: $mkdirp.sync
 };
 
-File._os = File.prototype._os = {
+File.$os = File.prototype.$os = {
     homedir: $os.homedir
 };
 
-File._pth = File.prototype._pth = {
+File.$path = File.prototype.$path = {
     join: $path.join,
     relative: $path.relative,
     resolve: $path.resolve,
@@ -2155,12 +2241,12 @@ File._pth = File.prototype._pth = {
     isAbsolute: $path.isAbsolute
 };
 
-File._rm = File.prototype._rm = {
+File.$rm = File.prototype.$rm = {
     rimraf: $rimraf,
     rimrafSync: $rimraf.sync
 };
 
-File._tmp = File.prototype._tmp = {
+File.$tmp = File.prototype.$tmp = {
     dir: $tmp.dir,
     dirSync: $tmp.dirSync,
     tmpName: $tmp.tmpName,
@@ -3163,7 +3249,7 @@ File.Reader = class extends File.Driver {
 
     asyncRead (file) {
         return new Promise((resolve, reject) => {
-            file._fs.readFile(file.fspath, this.options, (err, data) => {
+            file.$fs.readFile(file.fspath, this.options, (err, data) => {
                 if (err) {
                     reject(err);
                 }
@@ -3191,7 +3277,7 @@ File.Reader = class extends File.Driver {
     }
 
     read (file) {
-        return file._fs.readFileSync(file.fspath, this.options);
+        return file.$fs.readFileSync(file.fspath, this.options);
     }
 
     _parse (file, data) {
@@ -3276,7 +3362,7 @@ File.Writer = class extends File.Driver {
         let path = file.fspath;
 
         return new Promise((resolve, reject) => {
-            file._fs.writeFile(path, data, this.options, err => {
+            file.$fs.writeFile(path, data, this.options, err => {
                 if (err) {
                     reject(err);
                 }
@@ -3312,7 +3398,7 @@ File.Writer = class extends File.Driver {
 
         abs.parent.mkdir(this.dirmode);
 
-        file._fs.writeFileSync(abs.path, data, this.options);
+        file.$fs.writeFileSync(abs.path, data, this.options);
     }
 };
 

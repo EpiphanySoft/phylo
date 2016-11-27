@@ -818,12 +818,15 @@ Instead just do this:
         ...
     });
 
-## Special Folders
+## Locating Special Folders
 
  - `cwd()` - Wraps `process.cwd()` as a `File`.
  - `home()` - Wraps `os.homedir()` as a `File`.
  - `profile()` - Returns the platform-favored storage folder for app data.
- - `temp()` - Temporary folder for this application.
+ - `temp()` / `asyncTemp()` - Temporary folder for this application.
+ - `which(name,opts)` - Searches the **PATH** for a program by name. The `opts` can be
+  a replacement **PATH** or an object with a `path` property that is the replacement.
+  The asynchronous form is `asyncWhich(name,opts)`.
 
 ### Temp
 

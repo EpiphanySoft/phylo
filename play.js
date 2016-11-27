@@ -5,6 +5,15 @@ const Globber = File.Globber;
 
 File.COMPANY = 'Foobar';
 
+console.log(`which node ==> ${File.which('node')}`);
+
+// File.asyncWhich('foofoo').then(ff => {
+//     console.log(`foofoo ${ff}`);
+// },
+// e => {
+//     console.error(`No foofoo ${e.code}`);
+// });
+
 let gg = Globber.get('i');
 console.log(gg);
 
@@ -72,12 +81,12 @@ catch (e) {
 //     console.log(`ff: ${ff} ==> ${ff.name}`);
 // });
 
-let fd = File.cwd().join('foo');
-fd.mkdir();
+// let fd = File.cwd().join('foo');
+// fd.mkdir();
 
-File.cwd().list('A', ff => {
-    console.log(`ff: ${ff}`);
-});
+// File.cwd().list('A', ff => {
+//     console.log(`ff: ${ff}`);
+// });
 
 // console.log(`rm ${fd}`);
 // fd.remove();
@@ -85,28 +94,28 @@ File.cwd().list('A', ff => {
 //     console.log(`ff: ${ff}`);
 // });
 
-f = fd.join('foo.json');
-f.save(pkg, 'json5');
-f.parent.list('A', '*.json').forEach(ff => {
-    console.log(`ff: ${ff} ==> ${ff.name}`);
-});
-
-console.log(`rm ${f.name}`);
-f.remove();
-f.parent.list('A', '*.json').forEach(ff => {
-    console.log(`ff: ${ff} ==> ${ff.name}`);
-});
-
-//f.save(pkg, 'json5');
-fd.asyncRemove().then(ff => {
-    console.log(`ff: ${ff}`);
-    File.cwd().list('A', cc => {
-        console.log(`cc: ${cc}`);
-    });
-},
-e => {
-    console.log('rm err:', e.message);
-});
+// f = fd.join('foo.json');
+// f.save(pkg, 'json5');
+// f.parent.list('A', '*.json').forEach(ff => {
+//     console.log(`ff: ${ff} ==> ${ff.name}`);
+// });
+//
+// console.log(`rm ${f.name}`);
+// f.remove();
+// f.parent.list('A', '*.json').forEach(ff => {
+//     console.log(`ff: ${ff} ==> ${ff.name}`);
+// });
+//
+// //f.save(pkg, 'json5');
+// fd.asyncRemove().then(ff => {
+//     console.log(`ff: ${ff}`);
+//     File.cwd().list('A', cc => {
+//         console.log(`cc: ${cc}`);
+//     });
+// },
+// e => {
+//     console.log('rm err:', e.message);
+// });
 
 // f.list('A', (name, f2) => { console.log('f2',f2); return name.endsWith('.js'); }).forEach(ff => {
 //     console.log(`ff: ${ff} ==> ${ff.name}`);
