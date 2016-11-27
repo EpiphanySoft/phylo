@@ -2,22 +2,23 @@
 
 // TODO sanitize
 
-const Fs = require('fs');
-const OS = require('os');
-const Path = require('path');
+// Use $ prefix for imports to avoid name collision with locals and parameters
+// (esp bad here is "path" module):
+const $fs =     require('fs');
+const $json5 =  require('json5');
+const $mkdirp = require('mkdirp');
+const $os =     require('os');
+const $path =   require('path');
+const $rimraf = require('rimraf');
+const $tmp =    require('tmp');
 
-const platform = OS.platform();
+const platform = $os.platform();
 
 const isWin = /^win\d\d$/i.test(platform);
 const isMac = /^darwin$/i.test(platform);
 
 // Do not require wrongly... fswin wrecks non-Windows platforms:
-const fswin = isWin ? require('fswin') : null;
-
-const json5  = require('json5');
-const mkdirp = require('mkdirp');
-const rimraf = require('rimraf');
-const Tmp    = require('tmp');
+const $fswin = isWin ? require('fswin') : null;
 
 const re = {
     abs: /^~{1,2}[\/\\]/,
@@ -70,10 +71,10 @@ class File {
      */
     static access (filePath) {
         if (!filePath) {
-            return Access.getError('ENOENT');
+            return this.Access.getError('ENOENT');
         }
 
-        return File.from(filePath).access();
+        return this.from(filePath).access();
     }
 
     /**
@@ -99,26 +100,26 @@ class File {
      * @return {Promise<File>}
      */
     static asyncTemp (options) {
-        let cached = File._temp;
+        let cached = this.hasOwnProperty('_temp');
         let useCache = (options === undefined);
 
         if (cached && useCache) {
-            return Promise.resolve(cached);
+            return Promise.resolve(this._temp);
         }
 
         return new Promise((resolve, reject) => {
-            Tmp.dir(options, (err, name) => {
+            this._tmp.dir(options, (err, name) => {
                 if (err) {
                     reject(err);
                 }
                 else {
-                    let f = File.from(name);
+                    let f = this.from(name);
 
                     if (useCache) {
                         // If we are after the shared temp, make sure it wasn't
                         // created during our async trip... If not, store this
                         // as the cached temp.
-                        f = File._temp || (File._temp = f);
+                        f = this._temp || (this._temp = f);
                     }
 
                     resolve(f);
@@ -141,7 +142,7 @@ class File {
      * @return {Boolean} `true` if the file exists.
      */
     static exists (filePath) {
-        let st = File.stat(filePath);
+        let st = this.stat(filePath);
 
         return !st.error;
     }
@@ -188,7 +189,7 @@ class File {
      * @return {RegExp}
      */
     static glob (pattern, options) {
-        return Globber.get(options || '').compile(pattern);
+        return this.Globber.get(options || '').compile(pattern);
     }
 
     /**
@@ -198,7 +199,7 @@ class File {
      * @return {File} The `os.homedir()` as a `File` instance.
      */
     static home () {
-        return new this(OS.homedir());
+        return new this(this._os.homedir());
     }
 
     /**
@@ -211,7 +212,7 @@ class File {
             return false;
         }
 
-        return File.from(filePath).isDir();
+        return this.from(filePath).isDir();
     }
 
     /**
@@ -224,7 +225,7 @@ class File {
             return false;
         }
 
-        return File.from(filePath).isFile();
+        return this.from(filePath).isFile();
     }
 
     /**
@@ -234,8 +235,8 @@ class File {
      * @return {File} The `File` instance from the resulting path.
      */
     static join (...parts) {
-        let f = File.joinPath(...parts);
-        return new File(f);
+        let f = this.joinPath(...parts);
+        return new this(f);
     }
 
     /**
@@ -255,7 +256,7 @@ class File {
             }
         }
 
-        let ret = (n === 1) ? parts[0] : (n && File._p.join(...parts));
+        let ret = (n === 1) ? parts[0] : (n && this._pth.join(...parts));
 
         return ret || '';
     }
@@ -288,15 +289,15 @@ class File {
      * @return {File} The `File` instance.
      */
     static profile (company) {
-        company = company || File.COMPANY;
+        company = company || this.COMPANY;
 
         if (!company) {
             throw new Error('Must provide company name to isolate profile data');
         }
 
-        let fn = File.profilers[platform] || File.profilers.default;
+        let fn = this.profilers[platform] || this.profilers.default;
 
-        return fn(File.home(), company);
+        return fn.call(this, this.home(), company);
     }
 
     /**
@@ -306,8 +307,8 @@ class File {
      * @return {File} The `File` instance.
      */
     static resolve (...parts) {
-        let f = File.resolvePath(...parts);
-        return new File(f);
+        let f = this.resolvePath(...parts);
+        return new this(f);
     }
 
     /**
@@ -324,10 +325,10 @@ class File {
                 p = p.path;
             }
 
-            parts[i] = File._detildify(p);
+            parts[i] = this._detildify(p);
         }
 
-        return (parts && parts.length && File._p.resolve(...parts)) || '';
+        return (parts && parts.length && this._pth.resolve(...parts)) || '';
     }
 
     /**
@@ -336,7 +337,7 @@ class File {
      * @return {String[]} The path parts.
      */
     static split (filePath) {
-        let path = File.path(filePath);
+        let path = this.path(filePath);
         return path.split(re.split);
     }
 
@@ -348,7 +349,7 @@ class File {
      * @return {Number}
      */
     static sorter (filePath1, filePath2) {
-        let a = File.from(filePath1);
+        let a = this.from(filePath1);
         return a.compare(filePath2, 'd');
     }
 
@@ -360,7 +361,7 @@ class File {
      * @return {Number}
      */
     static sorterFilesFirst (filePath1, filePath2) {
-        let a = File.from(filePath1);
+        let a = this.from(filePath1);
         return a.compare(filePath2, 'f');
     }
 
@@ -372,7 +373,7 @@ class File {
      * @return {Number}
      */
     static sorterByPath (filePath1, filePath2) {
-        let a = File.from(filePath1);
+        let a = this.from(filePath1);
         return a.compare(filePath2, false);
     }
 
@@ -385,7 +386,7 @@ class File {
      * @return {fs.Stats}
      */
     static stat (filePath) {
-        let f = File.from(filePath);
+        let f = this.from(filePath);
 
         if (!f) {
             return Stat.getError('ENOENT');
@@ -410,16 +411,19 @@ class File {
      * @return {File}
      */
     static temp (options) {
-        let result = File._temp;
+        let cached = this.hasOwnProperty('_temp');
         let useCache = (options === undefined);
 
-        if (!result || !useCache) {
-            result = Tmp.dirSync(options);
-            result = File.from(result.name);
+        if (cached && useCache) {
+            return this._temp;
+        }
 
-            if (useCache) {
-                File._temp = result;
-            }
+        let result = this._tmp.dirSync(options);
+
+        result = this.from(result.name);
+
+        if (useCache) {
+            this._temp = result;
         }
 
         return result;
@@ -432,7 +436,7 @@ class File {
      * @param {File/String...} parts The path fragments.
      */
     constructor (...parts) {
-        this.path = File.joinPath(...parts);
+        this.path = this.constructor.joinPath(...parts);
     }
 
     //----------------------------
@@ -473,7 +477,7 @@ class File {
             let ret;
 
             if (sep < 0) {
-                ret = File.resolvePath(path, '..');
+                ret = this._pth.resolve(path, '..');
 
                 if (path === ret) {
                     ret = null;
@@ -483,7 +487,7 @@ class File {
                 ret = path.substr(0, sep);
             }
 
-            this._parent = parent = ret && new File(ret);
+            this._parent = parent = this.constructor.from(ret);
         }
 
         return parent;
@@ -515,7 +519,7 @@ class File {
      * useful for `fs` module calls.
      */
     get fspath () {
-        return File._detildify(this.path);
+        return this.constructor._detildify(this.path);
     }
 
     //-----------------------------------------------------------------
@@ -526,7 +530,7 @@ class File {
      * @return {String}
      */
     absolutePath () {
-        return File.resolvePath(this.path);
+        return this.constructor.resolvePath(this.path);
     }
 
     //noinspection JSUnusedGlobalSymbols
@@ -535,14 +539,14 @@ class File {
      * @return {File}
      */
     absolutify () {
-        return File.from(this.absolutePath()); // null/blank handling
+        return this.constructor.from(this.absolutePath()); // null/blank handling
     }
 
     asyncCanonicalPath () {
         let path = this.absolutePath();
 
         return new Promise(resolve => {
-            Fs.realpath(path, (err, result) => {
+            this._fs.realpath(path, (err, result) => {
                 if (err) {
                     resolve(null);
                 }
@@ -555,7 +559,7 @@ class File {
 
     asyncCanonicalize () {
         return this.asyncCanonicalPath().then(path => {
-            return File.from(path);
+            return this.constructor.from(path);
         });
     }
 
@@ -565,7 +569,7 @@ class File {
      */
     canonicalPath () {
         try {
-            return Fs.realpathSync(this.absolutePath());
+            return this._fs.realpathSync(this.absolutePath());
         } catch (e) {
             return null;
         }
@@ -576,22 +580,22 @@ class File {
      * @return {File} The `File` with the canonical path or `null` if no file exists.
      */
     canonicalize () {
-        return File.from(this.canonicalPath()); // null/blank handling
+        return this.constructor.from(this.canonicalPath()); // null/blank handling
     }
 
     joinPath (...parts) {
-        return File.joinPath(this, ...parts);
+        return this.constructor.joinPath(this, ...parts);
     }
 
     join (...parts) {
-        return File.join(this, ...parts);
+        return this.constructor.join(this, ...parts);
     }
 
     lastSeparator () {
         let path = this.path,
             i = path.lastIndexOf('/');
 
-        if (File.Win) {
+        if (this.constructor.Win) {
             // Windows respects both / and \ as path separators
             i = Math.max(i, path.lastIndexOf('\\'));
         }
@@ -602,20 +606,20 @@ class File {
     nativePath (separator) {
         let p = this.path;
 
-        return p && p.replace(re.split, separator || File.separator);
+        return p && p.replace(re.split, separator || this.constructor.separator);
     }
 
     nativize (separator) {
-        return File.from(this.nativePath(separator));
+        return this.constructor.from(this.nativePath(separator));
     }
 
     normalize () {
-        return File.from(this.normalizedPath());
+        return this.constructor.from(this.normalizedPath());
     }
 
     normalizedPath () {
         let p = this.path;
-        return p && File._p.normalize(p);
+        return p && this._pth.normalize(p);
     }
 
     relativePath (path) {
@@ -625,19 +629,19 @@ class File {
 
         let p = this.absolutePath();
 
-        return p && path && File._p.relative(p, path);
+        return p && path && this._pth.relative(p, path);
     }
 
     relativize (path) {
-        return File.from(this.relativePath(path));
+        return this.constructor.from(this.relativePath(path));
     }
 
     resolvePath (...parts) {
-        return File.resolvePath(this, ...parts);
+        return this.constructor.resolvePath(this, ...parts);
     }
 
     resolve (...parts) {
-        return File.resolve(this, ...parts);
+        return this.constructor.resolve(this, ...parts);
     }
 
     slashifiedPath () {
@@ -649,11 +653,11 @@ class File {
      * @return {String}
      */
     slashify () {
-        return File.from(this.slashifiedPath());
+        return this.constructor.from(this.slashifiedPath());
     }
 
     split () {
-        return File.split(this);
+        return this.constructor.split(this);
     }
 
     toString () {
@@ -662,7 +666,7 @@ class File {
 
     terminatedPath (separator) {
         if (separator == null || separator === true) {
-            separator = File.separator;
+            separator = this.constructor.separator;
         }
 
         let p = this.path;
@@ -688,7 +692,7 @@ class File {
     }
 
     terminate (separator) {
-        return File.from(this.terminatedPath(separator));
+        return this.constructor.from(this.terminatedPath(separator));
     }
 
     unterminatedPath () {
@@ -696,7 +700,7 @@ class File {
     }
 
     unterminate () {
-        return File.from(this.unterminatedPath());
+        return this.constructor.from(this.unterminatedPath());
     }
 
     //-----------------------------------------------------------------
@@ -712,7 +716,7 @@ class File {
      * or great-than the `other`.
      */
     compare (other, first) {
-        other = File.from(other);
+        other = this.constructor.from(other);
 
         if (!other) {
             return 1;
@@ -743,7 +747,7 @@ class File {
         let b = other.unterminatedPath();
 
         // If the platform has case-insensitive file names, ignore case...
-        if (File.NOCASE) {
+        if (this.constructor.NOCASE) {
             a = a.toLocaleLowerCase();
             b = b.toLocaleLowerCase();
         }
@@ -759,7 +763,7 @@ class File {
 
     isAbsolute () {
         let p = this.path;
-        return p ? re.abs.test(p) || File._p.isAbsolute(p) : false;
+        return p ? re.abs.test(p) || this._pth.isAbsolute(p) : false;
     }
 
     isRelative () {
@@ -767,14 +771,14 @@ class File {
     }
 
     prefixes (subPath) {
-        subPath = File.from(subPath);
+        subPath = this.constructor.from(subPath);
 
         if (subPath) {
             // Ensure we don't have trailing slashes ("/foo/bar/" => "/foo/bar")
             let a = this.slashify().unterminatedPath();
             let b = subPath.slashifiedPath();
 
-            if (File.NOCASE) {
+            if (this.constructor.NOCASE) {
                 a = a.toLocaleLowerCase();
                 b = b.toLocaleLowerCase();
             }
@@ -820,12 +824,13 @@ class File {
      */
     access () {
         let st = this.stat();
+        let Acc = this.constructor.Access;
 
         if (st.error) {
-            return Access.getError(st.error);
+            return Acc.getError(st.error);
         }
 
-        return Access[st.mode & Access.rwx.mask];
+        return Acc[st.mode & Acc.rwx.mask];
     }
 
     /**
@@ -887,7 +892,7 @@ class File {
      * @return {Boolean}
      */
     isHidden (asNative) {
-        if (!File.Win || !asNative) {
+        if (!this.constructor.Win || !asNative) {
             let name = this.name || '';
 
             if (name[0] === '.') {
@@ -895,7 +900,7 @@ class File {
             }
         }
 
-        if (File.Win) {
+        if (this.constructor.Win) {
             let st = this.stat();
 
             return st.attrib.H; // if we got an error, H will be false
@@ -954,12 +959,13 @@ class File {
             let path = this.fspath;
 
             try {
-                st = Fs.statSync(path);
+                st = this._fs.statSync(path);
 
-                st.attrib = File.Win ? Win.attrib(path) : Attribute.NULL;
+                let Win = this.constructor.Win;
+                st.attrib = Win ? Win.attrib(path) : this.constructor.Attribute.NULL;
             }
             catch (e) {
-                st = Stat.getError(e);
+                st = this.constructor.Stat.getError(e);
             }
 
             this._stat = st;
@@ -988,12 +994,13 @@ class File {
             let path = this.fspath;
 
             try {
-                st = Fs.lstatSync(path);
+                st = this._fs.lstatSync(path);
 
-                st.attrib = File.Win ? Win.attrib(path) : Attribute.NULL;
+                let Win = this.constructor.Win;
+                st.attrib = Win ? Win.attrib(path) : this.constructor.Attribute.NULL;
             }
             catch (e) {
-                st = Stat.getError(e);
+                st = this.constructor.Stat.getError(e);
             }
 
             this._lstat = st;
@@ -1165,6 +1172,8 @@ class File {
      * @return {Promise}
      */
     asyncAccess () {
+        const Access = this.constructor.Access;
+
         return this.asyncStat().then(st => {
             if (st.error) {
                 return Access.getError(st.error);
@@ -1193,7 +1202,9 @@ class File {
      * @return {Promise<Boolean>}
      */
     asyncIsHidden (asNative) {
-        if (!File.Win || !asNative) {
+        const Win = this.constructor.Win;
+
+        if (!Win || !asNative) {
             let name = this.name || '';
 
             if (name[0] === '.') {
@@ -1201,7 +1212,7 @@ class File {
             }
         }
 
-        if (File.Win) {
+        if (Win) {
             return this.asyncStat().then(st => {
                 return st.attrib.H;  // if we got an error, H will be false
             });
@@ -1258,19 +1269,22 @@ class File {
             return Promise.resolve(this._stat);
         }
 
+        const F = this.constructor;
         let path = this.fspath;
 
         return this._async('_asyncStat', () => {
             return new Promise(resolve => {
-                Fs.stat(path, (err, st) => {
+                this._fs.stat(path, (err, st) => {
                     if (err) {
-                        resolve(Stat.getError(err));
+                        resolve(F.Stat.getError(err));
                     }
                     else {
-                        st.attrib = Attribute.NULL;
+                        st.attrib = F.Attribute.NULL;
                         this._stat = st;
 
-                        if (File.Win) {
+                        const Win = F.Win;
+
+                        if (Win) {
                             Win.asyncAttrib(path).then(attr => {
                                     st.attrib = attr;
                                     resolve(st);
@@ -1312,19 +1326,21 @@ class File {
             return Promise.resolve(this._lstat);
         }
 
+        const F = this.constructor;
         let path = this.fspath;
 
         return this._async('_asyncStatLink', () => {
             return new Promise(resolve => {
-                Fs.lstat(path, (err, st) => {
+                this._fs.lstat(path, (err, st) => {
                     if (err) {
-                        resolve(Stat.getError(err));
+                        resolve(F.Stat.getError(err));
                     }
                     else {
-                        st.attrib = Attribute.NULL;
+                        st.attrib = F.Attribute.NULL;
                         this._lstat = st;
 
-                        if (File.Win) {
+                        let Win = F.Win;
+                        if (Win) {
                             Win.asyncAttrib(path).then(attr => {
                                     st.attrib = attr;
                                     resolve(st);
@@ -1362,6 +1378,7 @@ class File {
             mode = '';
         }
 
+        const F = this.constructor;
         let listMode = ListMode.get(mode);
 
         // If matcher is a String, we'll get a default globber compile. If it is a
@@ -1414,7 +1431,7 @@ class File {
                 }
 
                 if (listMode.o) {
-                    result.sort(File.sorter);
+                    result.sort(F.sorter);
                 }
 
                 resolve(result);
@@ -1423,7 +1440,7 @@ class File {
 
             let result = [];
 
-            Fs.readdir(this.fspath, (err, names) => {
+            this._fs.readdir(this.fspath, (err, names) => {
                 if (err) {
                     if (listMode.T) {
                         reject(err);
@@ -1437,7 +1454,7 @@ class File {
                 let promises = [];
 
                 names.forEach(name => {
-                    let f = new File(this, name);
+                    let f = new F(this, name);
                     let promise;
 
                     f._parent = this;
@@ -1504,12 +1521,12 @@ class File {
         }, options);
 
         return new Promise((resolve, reject) => {
-            Tmp.tmpName(options, (err, name) => {
+            this._tmp.tmpName(options, (err, name) => {
                 if (err) {
                     reject(err);
                 }
                 else {
-                    resolve(File.from(name));
+                    resolve(this.constructor.from(name));
                 }
             });
         });
@@ -1580,16 +1597,17 @@ class File {
             mode = '';
         }
 
+        const F = this.constructor;
         let listMode = ListMode.get(mode);
         let ret = [];
         let names;
 
         if (listMode.T) {
-            names = Fs.readdirSync(this.fspath);
+            names = this._fs.readdirSync(this.fspath);
         }
         else {
             try {
-                names = Fs.readdirSync(this.fspath);
+                names = this._fs.readdirSync(this.fspath);
             }
             catch (e) {
                 return null;
@@ -1608,7 +1626,7 @@ class File {
                 continue;
             }
 
-            let f = new File(this, name);
+            let f = new F(this, name);
             let st = listMode.l ? f.statLink() : (listMode.s ? f.stat() : null);
 
             if (listMode.l && listMode.s) {
@@ -1632,10 +1650,10 @@ class File {
         }
 
         if (listMode.O) {
-            ret.sort(File.sorterFilesFirst);
+            ret.sort(F.sorterFilesFirst);
         }
         else if (listMode.o) {
-            ret.sort(File.sorter);
+            ret.sort(F.sorter);
         }
 
         return ret;
@@ -1651,7 +1669,7 @@ class File {
      * @chainable
      */
     mkdir (mode) {
-        mkdirp.sync(this.fspath, {
+        this._md.mkdirpSync(this.fspath, {
             mode: mode
         });
 
@@ -1668,7 +1686,7 @@ class File {
      */
     asyncMkdir (mode) {
         return new Promise((resolve, reject) => {
-            mkdirp(this.fspath, { mode: mode }, err => {
+            this._md.mkdirp(this.fspath, { mode: mode }, err => {
                 if (err) {
                     reject(err);
                 }
@@ -1702,13 +1720,13 @@ class File {
                 };
 
                 if (opt.r) {
-                    rimraf(this.fspath, callback);
+                    this._rm.rimraf(this.fspath, callback);
                 }
                 else if (st.isDirectory()) {
-                    Fs.rmdir(this.fspath, callback);
+                    this._fs.rmdir(this.fspath, callback);
                 }
                 else {
-                    Fs.unlink(this.fspath, callback);
+                    this._fs.unlink(this.fspath, callback);
                 }
             });
         });
@@ -1725,13 +1743,13 @@ class File {
 
         if (this.exists()) {
             if (opt.r) {
-                rimraf.sync(this.fspath);
+                this._rm.rimrafSync(this.fspath);
             }
             else if (this.isDir()) {
-                Fs.rmdirSync(this.fspath);
+                this._fs.rmdirSync(this.fspath);
             }
             else {
-                Fs.unlinkSync(this.fspath);
+                this._fs.unlinkSync(this.fspath);
             }
         }
 
@@ -1748,9 +1766,9 @@ class File {
             dir: this.fspath
         }, options);
 
-        let result = Tmp.tmpNameSync(options);
+        let result = this._tmp.tmpNameSync(options);
 
-        return File.from(result);
+        return this.constructor.from(result);
     }
 
     //-----------------------------------------------------------------
@@ -1793,11 +1811,11 @@ class File {
     }
 
     _getReader (options) {
-        return this._getDriver(File.readers, 'reader', options);
+        return this._getDriver(this.readers, 'reader', options);
     }
 
     _getWriter (options) {
-        return this._getDriver(File.writers, 'writer', options);
+        return this._getDriver(this.writers, 'writer', options);
     }
 
     asyncLoad (options) {
@@ -1959,7 +1977,7 @@ class File {
      * once the traversal is complete.
      */
     asyncWalk (mode, matcher, before, after) {
-        let state = new File.Walker(this, mode, matcher, before, after);
+        let state = new this.constructor.Walker(this, mode, matcher, before, after);
 
         return state.asyncDescend(this).then(() => state);
     }
@@ -2037,7 +2055,7 @@ class File {
      * @return {File.Walker} The `state` object used for the traversal.
      */
     walk (mode, matcher, before, after) {
-        let state = new File.Walker(this, mode, matcher, before, after);
+        let state = new this.constructor.Walker(this, mode, matcher, before, after);
 
         state.descend(this);
 
@@ -2062,18 +2080,18 @@ class File {
     static _detildify (p) {
         if (p) {
             if (p === '~') {
-                p = OS.homedir();
+                p = this._os.homedir();
             }
             else if (p === '~~') {
-                p = File.profile().path;
+                p = this.profile().path;
             }
             else if (re.homey.test(p)) {
                 // if (p starts with "~/" or "~\\")
-                p = File._p.join(OS.homedir(), p.substr(1));
+                p = this._pth.join(this._os.homedir(), p.substr(1));
             }
             else if (re.profile.test(p)) {
                 // if (p starts with "~~/" or "~~\\")
-                p = File.profile().join(p.substr(2)).path;
+                p = this.profile().join(p.substr(2)).path;
             }
         }
 
@@ -2099,16 +2117,56 @@ File.NOCASE = isWin || isMac;
 File.isDirectory = File.isDir;
 File.re = re;
 
-File.separator = Path.sep;
+File.separator = $path.sep;
 
-// These are the only pieces of the path module that we use so we copy them to the
-// File constructor so they can be replaced:
-File._p = {
-    join: Path.join,
-    relative: Path.relative,
-    resolve: Path.resolve,
-    normalize: Path.normalize,
-    isAbsolute: Path.isAbsolute
+// These are the only pieces of the fs and path module that we use so we copy them to
+// objects for easy overriding.
+File._fs = File.prototype._fs = {
+    realpath: $fs.realpath,
+    realpathSync: $fs.realpathSync,
+    statSync: $fs.statSync,
+    lstatSync: $fs.lstatSync,
+    stat: $fs.stat,
+    lstat: $fs.lstat,
+    readdir: $fs.readdir,
+    readdirSync: $fs.readdirSync,
+    readFile: $fs.readFile,
+    readFileSync: $fs.readFileSync,
+    rmdir: $fs.rmdir,
+    unlink: $fs.unlink,
+    rmdirSync: $fs.rmdirSync,
+    unlinkSync: $fs.unlinkSync,
+    writeFile: $fs.writeFile,
+    writeFileSync: $fs.writeFileSync
+};
+
+File._md = File.prototype._md = {
+    mkdirp: $mkdirp,
+    mkdirpSync: $mkdirp.sync
+};
+
+File._os = File.prototype._os = {
+    homedir: $os.homedir
+};
+
+File._pth = File.prototype._pth = {
+    join: $path.join,
+    relative: $path.relative,
+    resolve: $path.resolve,
+    normalize: $path.normalize,
+    isAbsolute: $path.isAbsolute
+};
+
+File._rm = File.prototype._rm = {
+    rimraf: $rimraf,
+    rimrafSync: $rimraf.sync
+};
+
+File._tmp = File.prototype._tmp = {
+    dir: $tmp.dir,
+    dirSync: $tmp.dirSync,
+    tmpName: $tmp.tmpName,
+    tmpNameSync: $tmp.tmpNameSync
 };
 
 File.profilers = {
@@ -2125,7 +2183,7 @@ File.profilers = {
     },
 
     win32 (home, company) {
-        return File.join(process.env.APPDATA || process.env.LOCALAPPDATA ||
+        return this.join(process.env.APPDATA || process.env.LOCALAPPDATA ||
                          home.join('AppData\\Roaming'), `${company}`);
 
     }
@@ -2310,7 +2368,7 @@ proto.asyncIsSymLink = proto.asyncIsSymbolicLink;
  */
 class Access {
     static getError (error) {
-        return Access[error] || new Access('', error);
+        return this[error] || new this('', error);
     }
 
     constructor (name, error) {
@@ -2377,9 +2435,9 @@ class Access {
          * This property holds the bit-wise OR of the available access modes
          * `fs.constants.R_OK`, `fs.constants.W_OK` and/or  `fs.constants.X_OK`.
          */
-        this.mask = (this.r ? Fs.constants.R_OK : 0) |
-                    (this.w ? Fs.constants.W_OK : 0) |
-                    (this.x ? Fs.constants.X_OK : 0);
+        this.mask = (this.r ? $fs.constants.R_OK : 0) |
+                    (this.w ? $fs.constants.W_OK : 0) |
+                    (this.x ? $fs.constants.X_OK : 0);
 
         /**
          * @property {"r"/"rw"/"rwx"/"w"/"wx"/"x"} name
@@ -2395,11 +2453,13 @@ class Access {
          */
         this.nameUpper = name.toUpperCase();
 
+        const C = this.constructor;
+
         if (error) {
-            Access[error] = this;
+            C[error] = this;
         }
         else if (name) {
-            Access[name] = Access[this.mask] = Access[this.nameUpper] = this;
+            C[name] = C[this.mask] = C[this.nameUpper] = this;
         }
 
         Object.freeze(this);
@@ -2422,9 +2482,9 @@ new Access('rwx');
 
 class Attribute {
     static get (attr) {
-        let all = Attribute.all;
-        let attrMap = Attribute.map;
-        let cache = Attribute.cache;
+        let all = this.all;
+        let attrMap = this.map;
+        let cache = this.cache;
         let mask = 0;
         let c, i, ret, text;
 
@@ -2454,7 +2514,7 @@ class Attribute {
         }
 
         if (!ret && !(ret = cache[mask])) {
-            ret = new Attribute(mask);
+            ret = new this(mask);
 
             if (text) {
                 // user may have passed out-of-order string, so store the attrib
@@ -2467,8 +2527,9 @@ class Attribute {
     }
 
     constructor (mask) {
-        let all = Attribute.all,
-            cache = Attribute.cache,
+        let C = this.constructor,
+            all = C.all,
+            cache = C.cache,
             text = '',
             c, i;
 
@@ -2629,7 +2690,7 @@ Options.prototype.isOptions = true;
  */
 class Globber extends Options {
     static from (matcher) {
-        return matcher ? Globber.DEFAULT.from(matcher) : null;
+        return matcher ? this.DEFAULT.from(matcher) : null;
     }
 
     /**
@@ -2859,10 +2920,10 @@ Object.freeze(zeroDate);
 class Stat {
     static getError (error) {
         let code = error.code || error;
-        let ret = Stat[code];
+        let ret = this[code];
 
         if (!ret) {
-            ret = new Stat(code);
+            ret = new this(code);
         }
 
         return ret;
@@ -2875,7 +2936,7 @@ class Stat {
         this.size = 0;
         this.attrib = Attribute.NULL;
 
-        Stat[error] = this;
+        this.constructor[error] = this;
 
         Object.freeze(this);
     }
@@ -3096,15 +3157,15 @@ File.Reader = class extends File.Driver {
      * as a direct reader config.
      */
 
-    asyncLoad (filename) {
-        return this.asyncRead(filename).then(data => {
-            return this._parse(filename, data);
+    asyncLoad (file) {
+        return this.asyncRead(file).then(data => {
+            return this._parse(file, data);
         });
     }
 
-    asyncRead (filename) {
+    asyncRead (file) {
         return new Promise((resolve, reject) => {
-            Fs.readFile(File.fspath(filename), this.options, (err, data) => {
+            file._fs.readFile(file.fspath, this.options, (err, data) => {
                 if (err) {
                     reject(err);
                 }
@@ -3115,10 +3176,10 @@ File.Reader = class extends File.Driver {
         });
     }
 
-    load (filename) {
-        let data = this.read(filename);
+    load (file) {
+        let data = this.read(file);
 
-        return this._parse(filename, data);
+        return this._parse(file, data);
     }
 
     parse (data) {
@@ -3131,16 +3192,16 @@ File.Reader = class extends File.Driver {
         return data;
     }
 
-    read (filename) {
-        return Fs.readFileSync(File.fspath(filename), this.options);
+    read (file) {
+        return file._fs.readFileSync(file.fspath, this.options);
     }
 
-    _parse (filename, data) {
+    _parse (file, data) {
         try {
             return this.parse(data, this);
         }
         catch (e) {
-            e.message = `Cannot parse ${filename}: ${e.message}`;
+            e.message = `Cannot parse ${file}: ${e.message}`;
             throw e;
         }
     }
@@ -3154,7 +3215,7 @@ Object.assign(File.Reader.prototype, {
     split: null
 });
 
-File.readers = {
+File.readers = File.prototype.readers = {
     binary: new File.Reader(),
 
     text: new File.Reader({
@@ -3173,7 +3234,7 @@ File.readers.json = File.readers.text.extend({
         // general, JSON5 is a very relaxed form of JSON that accepts all valid JSON
         // files and goes beyond to a nearly proper JavaScript-subset. All w/o eval
         // so it is secure.
-        return json5.parse(data);
+        return $json5.parse(data);
     }
 });
 
@@ -3201,8 +3262,8 @@ File.Writer = class extends File.Driver {
      * as a direct writer config.
      */
 
-    asyncSave (filename, data) {
-        let abs = File.from(filename).absolutify();
+    asyncSave (file, data) {
+        let abs = file.absolutify();
 
         // wrap this.serialize in Promise.resolve() to allow it to be a value or
         // a promise (maybe serialization needs to be async)...
@@ -3213,11 +3274,11 @@ File.Writer = class extends File.Driver {
         });
     }
 
-    asyncWrite (filename, data) {
-        let path = File.fspath(filename);
+    asyncWrite (file, data) {
+        let path = file.fspath;
 
         return new Promise((resolve, reject) => {
-            Fs.writeFile(path, data, this.options, err => {
+            file._fs.writeFile(path, data, this.options, err => {
                 if (err) {
                     reject(err);
                 }
@@ -3242,18 +3303,18 @@ File.Writer = class extends File.Driver {
         return this.serialize(data, this); // serialize() can be replaced
     }
 
-    save (filename, data) {
+    save (file, data) {
         let content = this._serialize(data);
 
-        this.write(filename, content);
+        this.write(file, content);
     }
 
-    write (filename, data) {
-        let abs = File.from(filename).absolutify();
+    write (file, data) {
+        let abs = file.absolutify();
 
         abs.parent.mkdir(this.dirmode);
 
-        Fs.writeFileSync(abs.path, data, this.options);
+        file._fs.writeFileSync(abs.path, data, this.options);
     }
 };
 
@@ -3271,7 +3332,7 @@ Object.assign(File.Writer.prototype, {
     join: null
 });
 
-File.writers = {
+File.writers = File.prototype.writers = {
     binary: new File.Writer(),
 
     text: new File.Writer({
@@ -3308,7 +3369,7 @@ File.writers.json = File.writers.text.extend({
 
 File.writers.json5 = File.writers.json.extend({
     serialize (data) {
-        return json5.stringify(data, this.replacer, this.indent);
+        return $json5.stringify(data, this.replacer, this.indent);
     }
 });
 
@@ -3332,7 +3393,7 @@ class Win {
                 }
             };
 
-            if (!fswin.getAttributes(path, process)) {
+            if (!$fswin.getAttributes(path, process)) {
                 //reject(new Error(`Cannot get attributes for ${path}`));
                 resolve(Attribute.NULL);
             }
@@ -3341,7 +3402,7 @@ class Win {
 
     static attrib (path) {
         try {
-            let attr = fswin.getAttributesSync(path);
+            let attr = $fswin.getAttributesSync(path);
             return Attribute.get(attr);
         }
         catch (e) {
