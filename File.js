@@ -1,7 +1,5 @@
 'use strict';
 
-// TODO sanitize
-
 // Use $ prefix for imports to avoid name collision with locals and parameters
 // (esp bad here is "path" module):
 const $fs =     require('fs');
@@ -3416,3 +3414,14 @@ File.Win = isWin && Win;
 //-----------------------------------------------------------------------------
 
 module.exports = File;
+
+/*
+TODO
+    static sanitizePath (path) {
+        return path.trim()
+            .replace(/\s+/g, '_')            //exchange whitespaces for underscores
+            .replace(/[^0-9a-zA-Z_-]/g, '')  //remove special chars
+            .substr(0, 60);                  //limit char length (also think of adding suffix for unique check)
+    }
+
+*/
