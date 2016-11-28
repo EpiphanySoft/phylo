@@ -1,7 +1,7 @@
 'use strict';
 
 // Use $ prefix for imports to avoid name collision with locals and parameters
-// (esp bad here is "path" module):
+// (esp bad here is 'path' module):
 const $fs =     require('fs');
 const $json5 =  require('json5');
 const $mkdirp = require('mkdirp');
@@ -27,7 +27,7 @@ const $fswin = isWin ? require('fswin') : null;
  *
  * ## Naming Conventions
  *
- * Any method that ends with "Path" returns a string, while all other methods return a
+ * Any method that ends with 'Path' returns a string, while all other methods return a
  * `File` (where appropriate). Methods often come in pairs: one that returns the result
  * as a String and one that returns a `File`. Since it is best to stay in the realm of
  * `File` objects, their names are the more concise.
@@ -38,7 +38,7 @@ const $fswin = isWin ? require('fswin') : null;
  *
  * ### Synchronous vs Asynchronous
  *
- * All async methods return promises and have names that begin with "async" (for example,
+ * All async methods return promises and have names that begin with 'async' (for example,
  * `asyncFoo()`). Consider the `stat` method. It is synchronous while the asynchronous
  * version is`asyncStat`.
  *
@@ -200,15 +200,15 @@ class File {
      * For example:
      *
      *      glob('*.txt')
-     *      glob('** /*.txt")
+     *      glob('** /*.txt')
      *
      * See `File.Globber` for more details on `options`.
      *
      * @param {String} pattern The glob pattern to convert.
-     * @param {String} [options=null] Pass `"E"` to enable "extended" globs like
-     * in Bash. Pass "S" to treat "*" as simple (shell-like) wildcards. This will which
-     * matches `"/"` characters with a `"*"`. By default, only `"**"` matches `"/"`.
-     * Other options are passed along a `RegExp` flags (e.g., "i" and "g").
+     * @param {String} [options=null] Pass `'E'` to enable "extended" globs like
+     * in Bash. Pass 'S' to treat '*' as simple (shell-like) wildcards. This will which
+     * matches `'/'` characters with a `'*'`. By default, only `'**'` matches `'/'`.
+     * Other options are passed along a `RegExp` flags (e.g., 'i' and 'g').
      * @return {RegExp}
      */
     static glob (pattern, options) {
@@ -217,7 +217,7 @@ class File {
 
     /**
      * Returns the `os.homedir()` as a `File` instance. On Windows, this is something
-     * like `"C:\Users\Name"`.
+     * like `'C:\Users\Name'`.
      *
      * @return {File} The `os.homedir()` as a `File` instance.
      */
@@ -295,7 +295,7 @@ class File {
 
     /**
      * Returns the folder into which applications should save data for their users. For
-     * example, on Windows this would be `"C:\Users\Name\AppData\Roaming\Company"` where
+     * example, on Windows this would be `'C:\Users\Name\AppData\Roaming\Company'` where
      * "Name" is the user's name and "Company" is the owner of the data (typically the
      * name of the company producing the application).
      *
@@ -497,17 +497,28 @@ class File {
     /**
      * @property {String} name
      * @readonly
-     * The name of the file at the end of the path. For example, given "/foo/bar/baz",
-     * the `name` is "baz".
-     * Typically known as `basename` on unix-like systems.
+     * The name of the file at the end of the path. For example, given '/foo/bar/baz',
+     * the `name` is 'baz'. Paths that end with a separator (e.g., '/foo/bar/') are
+     * treated as if the trailing separator were not present. That is, 'bar' would be
+     * the `name` of '/foo/bar/'.
+     *
+     * Typically known as `basename` on Linux-like systems.
      */
     get name () {
         let name = this._name;
 
         if (name === undefined) {
             let index = this.lastSeparator();
+            let path = this.path;
+            let end = path.length;
 
-            this._name = name = ((index > -1) && this.path.substr(index + 1)) || '';
+            if (index === path.length - 1) {
+                // e.g. 'foo/bar/'
+                index = this.lastSeparator((end = index) - 1);
+            }
+
+            // even if index = -1, index+1=0 which is what we want...
+            this._name = name = path.substring(index + 1, end) || '';
         }
 
         return name;
@@ -516,9 +527,10 @@ class File {
     /**
      * @property {File} parent
      * @readonly
-     * The parent directory of this file. For example, for "/foo/bar/baz" the `parent` is
-     * "/foo/bar". This is `null` for the file system root.
-     * Typically known as `dirname` on unix-like systems.
+     * The parent directory of this file. For example, for '/foo/bar/baz' the `parent` is
+     * '/foo/bar'. This is `null` for the file system root.
+     *
+     * Typically known as `dirname` on Linux-like systems.
      */
     get parent () {
         let parent = this._parent;
@@ -548,8 +560,8 @@ class File {
     /**
      * @property {String} extent
      * @readonly
-     * The type of the file at the end of the path. For example, given "/foo/bar/baz.js",
-     * the `extent` is "js". Returns `''` for files with no extension (e.g. README).
+     * The type of the file at the end of the path. For example, given '/foo/bar/baz.js',
+     * the `extent` is 'js'. Returns `''` for files with no extension (e.g. README).
      */
     get extent () {
         let ext = this._extent;
@@ -567,7 +579,7 @@ class File {
     /**
      * @property {String} fspath
      * @readonly
-     * The same as `path` property except resolved for `"~"` pseudo-roots and hence
+     * The same as `path` property except resolved for `'~'` pseudo-roots and hence
      * useful for `fs` module calls.
      */
     get fspath () {
@@ -643,9 +655,9 @@ class File {
         return this.constructor.join(this, ...parts);
     }
 
-    lastSeparator () {
+    lastSeparator (start) {
         let path = this.path,
-            i = path.lastIndexOf('/');
+            i = path.lastIndexOf('/', start);
 
         if (this.constructor.Win) {
             // Windows respects both / and \ as path separators
@@ -794,7 +806,7 @@ class File {
             }
         }
 
-        // Treat "/foo/bar" and "/foo/bar/" as equal (by stripping trailing delimiters)
+        // Treat '/foo/bar' and '/foo/bar/' as equal (by stripping trailing delimiters)
         let a = this.unterminatedPath();
         let b = other.unterminatedPath();
 
@@ -826,7 +838,7 @@ class File {
         subPath = this.constructor.from(subPath);
 
         if (subPath) {
-            // Ensure we don't have trailing slashes ("/foo/bar/" => "/foo/bar")
+            // Ensure we don't have trailing slashes ('/foo/bar/' => '/foo/bar')
             let a = this.slashify().unterminatedPath();
             let b = subPath.slashifiedPath();
 
@@ -836,9 +848,9 @@ class File {
             }
 
             if (a.startsWith(b)) {
-                // a = "/foo/bar"
-                // b = "/foo/bar/zip" ==> true
-                // b = "/foo/barf"    ==> false
+                // a = '/foo/bar'
+                // b = '/foo/bar/zip' ==> true
+                // b = '/foo/barf'    ==> false
                 return b[a.length] === '/';
             }
         }
@@ -887,7 +899,7 @@ class File {
 
     /**
      * Returns `true` if the desired access is available for this file.
-     * @param {"r"/"rw"/"rx"/"rwx"/"w"/"wx"/"x"} mode
+     * @param {'r'/'rw'/'rx'/'rwx'/'w'/'wx'/'x'} mode
      * @return {Boolean}
      */
     can (mode) {
@@ -1067,19 +1079,19 @@ class File {
      * Starting at this location, searches upwards for a location that passes the provided
      * `test` function. If `test` is a string, it will match any item (file or folder).
      *
-     *      // climb until a folder has a ".git" item (file or folder)
+     *      // climb until a folder has a '.git' item (file or folder)
      *      f = file.up('.git');
      *
-     *      // f references the folder that contains the ".git" folder.
+     *      // f references the folder that contains the '.git' folder.
      *
-     *      // Climb until a folder has a ".git" sub-folder.
+     *      // Climb until a folder has a '.git' sub-folder.
      *      f = file.up(p => p.join('.git').isDirectory());
      *
      * The above is equivalent to:
      *
      *      f = file.upDir('.git');
      *
-     *      // f references the folder that contains the ".git" folder.
+     *      // f references the folder that contains the '.git' folder.
      *
      * @param {String/Function} test If a string is passed, the string is passed to the
      * `has` method. Otherwise, the `test` function is called with the candidate and
@@ -1103,7 +1115,7 @@ class File {
      *
      *      f = file.upDir('.git');
      *
-     *      // f references the folder that contains the ".git" folder.
+     *      // f references the folder that contains the '.git' folder.
      *
      * @param {String} dir The sub-directory that the desired parent must contain.
      * @return {File}
@@ -1117,7 +1129,7 @@ class File {
      *
      *      f = file.upFile('package.json');
      *
-     *      // f references the folder that contains the "package.json" file.
+     *      // f references the folder that contains the 'package.json' file.
      *
      * @param {String} file The file that the desired parent must contain.
      * @return {File}
@@ -1130,16 +1142,16 @@ class File {
      * Starting at this location, searches upwards for a location that contains the given
      * item and returns a `File` describing the item.
      *
-     *      // climb until a folder has a ".git" item (file or folder)
+     *      // climb until a folder has a '.git' item (file or folder)
      *      f = file.upTo('.git');
      *
-     *      // f references the ".git" folder.
+     *      // f references the '.git' folder.
      *
      * The above is equivalent to:
      *
      *      f = file.upToDir('.git');
      *
-     *      // f references the ".git" folder.
+     *      // f references the '.git' folder.
      *
      * @param {String} name A name passed to the `has` method.
      * @return {File}
@@ -1160,7 +1172,7 @@ class File {
      *
      *      f = file.upToDir('.git');
      *
-     *      // f references the ".git" folder.
+     *      // f references the '.git' folder.
      *
      * @param {String} dir The sub-directory that the desired parent must contain.
      * @return {File}
@@ -1180,7 +1192,7 @@ class File {
      *
      *      f = file.upToFile('package.json');
      *
-     *      // f references the ".git" folder.
+     *      // f references the '.git' folder.
      *
      * @param {String} file The file that the desired parent must contain.
      * @return {File}
@@ -1589,7 +1601,7 @@ class File {
      * Returns a listing of items in this directory. The `mode` parameter can be used
      * to adjust what is reported.
      *
-     * The `mode` string contains character codes with optional "+" or "-" prefixes to
+     * The `mode` string contains character codes with optional '+' or '-' prefixes to
      * indicate enabled or disabled. When no prefix is provided, the option is enabled.
      *
      * For example:
@@ -1611,13 +1623,13 @@ class File {
      *
      * You can also pass a 2nd argument to more arbitrarily restrict the matching files:
      *
-     *      // List non-hidden files with "txt" extension:
+     *      // List non-hidden files with 'txt' extension:
      *      dir.list('', '*.txt');
      *
-     *      // List all files with name ending in ".txt":
+     *      // List all files with name ending in '.txt':
      *      dir.list('A', /\.txt$/i);
      *
-     *      // Return all ".js" files with the Windows "A" (archive) attribute:
+     *      // Return all '.js' files with the Windows 'A' (archive) attribute:
      *      dir.list('f', (name, f) => {
      *          return name.endsWith('.js') && f.stat().attrib.A;
      *      });
@@ -1752,7 +1764,7 @@ class File {
 
     /**
      * Asynchronously removes this file or directory.
-     * @param {String} [options] Remove options (currently only "r" for recursive).
+     * @param {String} [options] Remove options (currently only 'r' for recursive).
      * @return {Promise<File>} this
      */
     asyncRemove (options) {
@@ -1787,7 +1799,7 @@ class File {
 
     /**
      * Removes this file or directory.
-     * @param {String} [options] Remove options (currently only "r" for recursive).
+     * @param {String} [options] Remove options (currently only 'r' for recursive).
      * @return {File} this
      * @chainable
      */
@@ -1853,7 +1865,7 @@ class File {
         }
 
         if (!driver) {
-            driver = drivers[this.extent] || drivers.text; // eg extent="json"
+            driver = drivers[this.extent] || drivers.text; // eg extent='json'
         }
 
         if (opts) {
@@ -2045,9 +2057,9 @@ class File {
      *
      *      let packageDirs = dir.tips('package.json');
      *
-     * Finds all folders at "dir" or below that matches `has('package.json')`. When such
+     * Finds all folders at `dir` or below that matches `has('package.json')`. When such
      * folders are found, no further descent is performed. In this case that will avoid
-     * the "node_modules" sub-folder of such folders.
+     * the 'node_modules' sub-folder of such folders.
      *
      * @param {String} [mode] The `list` mode that controls directory listings.
      * @param {String/Function} test The test function to call or the string to pass to
@@ -2139,11 +2151,11 @@ class File {
                 p = this.profile().path;
             }
             else if (this.re.homey.test(p)) {
-                // if (p starts with "~/" or "~\\")
+                // if (p starts with '~/' or '~\\')
                 p = this.$path.join(this.$os.homedir(), p.substr(1));
             }
             else if (this.re.profile.test(p)) {
-                // if (p starts with "~~/" or "~~\\")
+                // if (p starts with '~~/' or '~~\\')
                 p = this.profile().join(p.substr(2)).path;
             }
         }
@@ -2323,7 +2335,7 @@ addTypeTest('isSymbolicLink', { l: _statModes.l, '': _statModes.l });
  * This method will potentially use cached stats (of the specified type) for the file.
  * If this is not desired, use `stat().isBlockDevice()` instead.
  * @method isBlockDevice
- * @param {"l"} [mode=null] An optional mode setting for the type of stats to use for
+ * @param {'l'} [mode=null] An optional mode setting for the type of stats to use for
  * the determination. By default `stat()` is used. Pass `'l'` (lowercase-L) to enable
  * `statLink()` mode.
  * @return {Boolean}
@@ -2331,7 +2343,7 @@ addTypeTest('isSymbolicLink', { l: _statModes.l, '': _statModes.l });
 /**
  * This is the asynchronous equivalent of `isBlockDevice()`.
  * @method asyncIsBlockDevice
- * @param {"l"} [mode=null] An optional mode setting for the type of stats to use for
+ * @param {'l'} [mode=null] An optional mode setting for the type of stats to use for
  * the determination. By default `stat()` is used. Pass `'l'` (lowercase-L) to enable
  * `statLink()` mode.
  * @return {Promise<Boolean>}
@@ -2340,7 +2352,7 @@ addTypeTest('isSymbolicLink', { l: _statModes.l, '': _statModes.l });
  * This method will potentially use cached stats (of the specified type) for the file.
  * If this is not desired, use `stat().isCharacterDevice()` instead.
  * @method isCharacterDevice
- * @param {"l"} [mode=null] An optional mode setting for the type of stats to use for
+ * @param {'l'} [mode=null] An optional mode setting for the type of stats to use for
  * the determination. By default `stat()` is used. Pass `'l'` (lowercase-L) to enable
  * `statLink()` mode.
  * @return {Boolean}
@@ -2348,7 +2360,7 @@ addTypeTest('isSymbolicLink', { l: _statModes.l, '': _statModes.l });
 /**
  * This is the asynchronous equivalent of `isCharacterDevice()`.
  * @method asyncIsCharacterDevice
- * @param {"l"} [mode=null] An optional mode setting for the type of stats to use for
+ * @param {'l'} [mode=null] An optional mode setting for the type of stats to use for
  * the determination. By default `stat()` is used. Pass `'l'` (lowercase-L) to enable
  * `statLink()` mode.
  * @return {Promise<Boolean>}
@@ -2357,7 +2369,7 @@ addTypeTest('isSymbolicLink', { l: _statModes.l, '': _statModes.l });
  * This method will potentially use cached stats (of the specified type) for the file.
  * If this is not desired, use `stat().isDirectory()` instead.
  * @method isDirectory
- * @param {"l"} [mode=null] An optional mode setting for the type of stats to use for
+ * @param {'l'} [mode=null] An optional mode setting for the type of stats to use for
  * the determination. By default `stat()` is used. Pass `'l'` (lowercase-L) to enable
  * `statLink()` mode.
  * @return {Boolean}
@@ -2365,7 +2377,7 @@ addTypeTest('isSymbolicLink', { l: _statModes.l, '': _statModes.l });
 /**
  * This is the asynchronous equivalent of `isDirectory()`.
  * @method asyncIsDirectory
- * @param {"l"} [mode=null] An optional mode setting for the type of stats to use for
+ * @param {'l'} [mode=null] An optional mode setting for the type of stats to use for
  * the determination. By default `stat()` is used. Pass `'l'` (lowercase-L) to enable
  * `statLink()` mode.
  * @return {Promise<Boolean>}
@@ -2374,7 +2386,7 @@ addTypeTest('isSymbolicLink', { l: _statModes.l, '': _statModes.l });
  * This method will potentially use cached stats (of the specified type) for the file.
  * If this is not desired, use `stat().isFile()` instead.
  * @method isFile
- * @param {"l"} [mode=null] An optional mode setting for the type of stats to use for
+ * @param {'l'} [mode=null] An optional mode setting for the type of stats to use for
  * the determination. By default `stat()` is used. Pass `'l'` (lowercase-L) to enable
  * `statLink()` mode.
  * @return {Boolean}
@@ -2382,7 +2394,7 @@ addTypeTest('isSymbolicLink', { l: _statModes.l, '': _statModes.l });
 /**
  * This is the asynchronous equivalent of `isFile()`.
  * @method asyncIsFile
- * @param {"l"} [mode=null] An optional mode setting for the type of stats to use for
+ * @param {'l'} [mode=null] An optional mode setting for the type of stats to use for
  * the determination. By default `stat()` is used. Pass `'l'` (lowercase-L) to enable
  * `statLink()` mode.
  * @return {Promise<Boolean>}
@@ -2391,7 +2403,7 @@ addTypeTest('isSymbolicLink', { l: _statModes.l, '': _statModes.l });
  * This method will potentially use cached stats (of the specified type) for the file.
  * If this is not desired, use `stat().isFIFO()` instead.
  * @method isFIFO
- * @param {"l"} [mode=null] An optional mode setting for the type of stats to use for
+ * @param {'l'} [mode=null] An optional mode setting for the type of stats to use for
  * the determination. By default `stat()` is used. Pass `'l'` (lowercase-L) to enable
  * `statLink()` mode.
  * @return {Boolean}
@@ -2399,7 +2411,7 @@ addTypeTest('isSymbolicLink', { l: _statModes.l, '': _statModes.l });
 /**
  * This is the asynchronous equivalent of `isFIFO()`.
  * @method asyncIsFIFO
- * @param {"l"} [mode=null] An optional mode setting for the type of stats to use for
+ * @param {'l'} [mode=null] An optional mode setting for the type of stats to use for
  * the determination. By default `stat()` is used. Pass `'l'` (lowercase-L) to enable
  * `statLink()` mode.
  * @return {Promise<Boolean>}
@@ -2408,7 +2420,7 @@ addTypeTest('isSymbolicLink', { l: _statModes.l, '': _statModes.l });
  * This method will potentially use cached stats (of the specified type) for the file.
  * If this is not desired, use `stat().isSocket()` instead.
  * @method isSocket
- * @param {"l"} [mode=null] An optional mode setting for the type of stats to use for
+ * @param {'l'} [mode=null] An optional mode setting for the type of stats to use for
  * the determination. By default `stat()` is used. Pass `'l'` (lowercase-L) to enable
  * `statLink()` mode.
  * @return {Boolean}
@@ -2416,7 +2428,7 @@ addTypeTest('isSymbolicLink', { l: _statModes.l, '': _statModes.l });
 /**
  * This is the asynchronous equivalent of `isSocket()`.
  * @method asyncIsSocket
- * @param {"l"} [mode=null] An optional mode setting for the type of stats to use for
+ * @param {'l'} [mode=null] An optional mode setting for the type of stats to use for
  * the determination. By default `stat()` is used. Pass `'l'` (lowercase-L) to enable
  * `statLink()` mode.
  * @return {Promise<Boolean>}
@@ -2539,14 +2551,14 @@ class Access {
                     (this.x ? $fs.constants.X_OK : 0);
 
         /**
-         * @property {"r"/"rw"/"rwx"/"w"/"wx"/"x"} name
+         * @property {'r'/'rw'/'rwx'/'w'/'wx'/'x'} name
          * @readonly
          * This string holds the available access modes as lowercase single letters.
          */
         this.name = name;
 
         /**
-         * @property {"R"/"RW"/"RWX"/"W"/"WX"/"X"} nameUpper
+         * @property {'R'/'RW'/'RWX'/'W'/'WX'/'X'} nameUpper
          * @readonly
          * This string holds the available access modes as uppercase single letters.
          */
@@ -2741,7 +2753,7 @@ Options.prototype.isOptions = true;
 /**
  * @class File.Globber
  *
- * This class converts "globs" (file-system wildcard expressions like "*.txt") into
+ * This class converts "globs" (file-system wildcard expressions like '*.txt') into
  * equivalent `RegExp` instances. Normally, instances are created by `File.glob()`
  * method:
  *
@@ -2756,13 +2768,13 @@ Options.prototype.isOptions = true;
  *      // Greedy wildcards and simple globs:
  *      let allTxtRe = File.glob('* /*.txt', 'GS');
  *
- * ## Case-Sensitivity ("C")
+ * ## Case-Sensitivity ('C')
  *
  * By default, the `RegExp` is case-sensitive on platforms where file names are also
  * case-sensitive, and vise-versa. That means, on Windows and Mac OS X, the `RegExp`
- * is created with the "i" flag.
+ * is created with the 'i' flag.
  *
- * Setting this option means that the "i" flag can be provided manually (or not) by the
+ * Setting this option means that the 'i' flag can be provided manually (or not) by the
  * caller.
  *
  * ## Greedy Wildcards ('G')
@@ -2780,9 +2792,9 @@ Options.prototype.isOptions = true;
  * Lastly, when `deep` is _false_, `'/foo/**'` is equivalent to `'/foo/*'` with
  * `deep` set to _true_.
  *
- * ## Simple Globs ("S")
+ * ## Simple Globs ('S')
  * To disable matching so called "extended" globs (like bash) and single character
- * matching, matching ranges of characters, group matching, etc., set the "S" option.
+ * matching, matching ranges of characters, group matching, etc., set the 'S' option.
  *
  * *NOTE*: This is shamelessly borrowed from: [glob-to-regexp](https://www.npmjs.com/package/glob-to-regexp)
  * but adjusted for better support for Windows paths.
@@ -2793,7 +2805,7 @@ class Globber extends Options {
     }
 
     /**
-     * Accepts a string of `Globber` options ("C", "G" and "S") and `RegExp` flags (all
+     * Accepts a string of `Globber` options ('C', 'G' and 'S') and `RegExp` flags (all
      * other characters).
      * @param {String} options
      */
@@ -3221,7 +3233,7 @@ File.Driver = class {
             if (!config.options) {
                 // If the user didn't supply specific fs options, see about encoding
                 if (config.encoding) {
-                    // "options" is always a safe copy we can adjust...
+                    // 'options' is always a safe copy we can adjust...
                     ret.options.encoding = config.encoding;
                 }
             }

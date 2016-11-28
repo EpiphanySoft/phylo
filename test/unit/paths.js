@@ -15,22 +15,22 @@ describe('Path manipulation', () => {
             expect(f.path.indexOf('..')).to.be.above(-1);
         });
 
-        it('abs.isRelative', () => {
+        it('return false for abs.isRelative', () => {
             let f = File.cwd();
             expect(f.isRelative()).to.be(false);
         });
 
-        it('abs.isAbsolute', () => {
+        it('return true for abs.isAbsolute', () => {
             let f = File.cwd();
             expect(f.isAbsolute()).to.be(true);
         });
 
-        it('rel.isRelative', () => {
+        it('return true for rel.isRelative', () => {
             let f = new File(P);
             expect(f.isRelative()).to.be(true);
         });
 
-        it('rel.isAbsolute', () => {
+        it('return false for rel.isAbsolute', () => {
             let f = new File(P);
             expect(f.isAbsolute()).to.be(false);
         });
@@ -56,7 +56,25 @@ describe('Path manipulation', () => {
     });
 
     describe('name property', () => {
-        //TODO
+        it('should return the name of an unterminated name', () => {
+            let f = new File('foo');
+            expect(f.name).to.be('foo');
+        });
+
+        it('should return the name of an terminated name', () => {
+            let f = new File('foo/');
+            expect(f.name).to.be('foo');
+        });
+
+        it('should return the name of an unterminated path', () => {
+            let f = new File('foo/bar');
+            expect(f.name).to.be('bar');
+        });
+
+        it('should return the name of an terminated path', () => {
+            let f = new File('foo/bar/');
+            expect(f.name).to.be('bar');
+        });
     });
 
     describe('parent property', () => {
