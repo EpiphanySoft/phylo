@@ -19,14 +19,6 @@ const isMac = /^darwin$/i.test(platform);
 // Do not require wrongly... fswin wrecks non-Windows platforms:
 const $fswin = isWin ? require('fswin') : null;
 
-const re = {
-    abs: /^~{1,2}[\/\\]/,
-    homey: /^~[\/\\]/,
-    profile: /^~~[\/\\]/,
-    slash: /\\/g,
-    split: isWin ? /[\/\\]/g : /[\/]/g
-};
-
 //================================================================================
 
 /**
@@ -134,7 +126,7 @@ class File {
      * @param {String} name The name of the program to find.
      * @param {Object/String/String[]} options Options to control the process or a
      * replacement value for the PATH as a string or array of strings.
-     * @param {String/String[]} options.path A replacement PATH
+     * @param {String/String[]/File[]} options.path A replacement PATH
      * @param {String} options.pathExt On Windows, this overrides the **PATHEXT**
      * environment variable (normally, '.EXE;.CMD;.BAT;.COM').
      * @return {Promise<File>}
@@ -369,7 +361,7 @@ class File {
      */
     static split (filePath) {
         let path = this.path(filePath);
-        return path.split(re.split);
+        return path.split(this.re.split);
     }
 
     /**
@@ -420,7 +412,7 @@ class File {
         let f = this.from(filePath);
 
         if (!f) {
-            return Stat.getError('ENOENT');
+            return this.Stat.getError('ENOENT');
         }
 
         return f.stat();
@@ -468,7 +460,7 @@ class File {
      * @param {String} name The name of the program to find.
      * @param {Object/String/String[]} options Options to control the process or a
      * replacement value for the PATH as a string or array of strings.
-     * @param {String/String[]} options.path A replacement PATH
+     * @param {String/String[]/File[]} options.path A replacement PATH
      * @param {String} options.pathExt On Windows, this overrides the **PATHEXT**
      * environment variable (normally, '.EXE;.CMD;.BAT;.COM').
      * @return {File}
@@ -666,7 +658,7 @@ class File {
     nativePath (separator) {
         let p = this.path;
 
-        return p && p.replace(re.split, separator || this.constructor.separator);
+        return p && p.replace(this.re.split, separator || this.constructor.separator);
     }
 
     nativize (separator) {
@@ -705,7 +697,7 @@ class File {
     }
 
     slashifiedPath () {
-        return this.path.replace(re.slash, '/');
+        return this.path.replace(this.re.slash, '/');
     }
 
     /**
@@ -823,7 +815,7 @@ class File {
 
     isAbsolute () {
         let p = this.path;
-        return p ? re.abs.test(p) || this.$path.isAbsolute(p) : false;
+        return p ? this.re.abs.test(p) || this.$path.isAbsolute(p) : false;
     }
 
     isRelative () {
@@ -884,13 +876,13 @@ class File {
      */
     access () {
         let st = this.stat();
-        let Acc = this.constructor.Access;
+        let Access = this.constructor.Access;
 
         if (st.error) {
-            return Acc.getError(st.error);
+            return Access.getError(st.error);
         }
 
-        return Acc[st.mode & Acc.rwx.mask];
+        return Access[st.mode & Access.rwx.mask];
     }
 
     /**
@@ -952,7 +944,9 @@ class File {
      * @return {Boolean}
      */
     isHidden (asNative) {
-        if (!this.constructor.Win || !asNative) {
+        const Win = this.constructor.Win;
+
+        if (!Win || !asNative) {
             let name = this.name || '';
 
             if (name[0] === '.') {
@@ -960,7 +954,7 @@ class File {
             }
         }
 
-        if (this.constructor.Win) {
+        if (Win) {
             let st = this.stat();
 
             return st.attrib.H; // if we got an error, H will be false
@@ -1330,7 +1324,8 @@ class File {
         }
 
         const F = this.constructor;
-        let path = this.fspath;
+        const path = this.fspath;
+        const Win = F.Win;
 
         return this._async('_asyncStat', () => {
             return new Promise(resolve => {
@@ -1341,8 +1336,6 @@ class File {
                     else {
                         st.attrib = F.Attribute.NULL;
                         this._stat = st;
-
-                        const Win = F.Win;
 
                         if (Win) {
                             Win.asyncAttrib(path).then(attr => {
@@ -1387,7 +1380,8 @@ class File {
         }
 
         const F = this.constructor;
-        let path = this.fspath;
+        const path = this.fspath;
+        const Win = F.Win;
 
         return this._async('_asyncStatLink', () => {
             return new Promise(resolve => {
@@ -1399,7 +1393,6 @@ class File {
                         st.attrib = F.Attribute.NULL;
                         this._lstat = st;
 
-                        let Win = F.Win;
                         if (Win) {
                             Win.asyncAttrib(path).then(attr => {
                                     st.attrib = attr;
@@ -1439,12 +1432,12 @@ class File {
         }
 
         const F = this.constructor;
-        let listMode = ListMode.get(mode);
+        let listMode = F.ListMode.get(mode);
 
         // If matcher is a String, we'll get a default globber compile. If it is a
         // RegExp or a Function, those things are already baked in. In all cases, we
         // have null or a function that takes a File.
-        let test = Globber.from(matcher);
+        let test = F.Globber.from(matcher);
 
         return new Promise((resolve, reject) => {
             let fail = e => {
@@ -1658,7 +1651,7 @@ class File {
         }
 
         const F = this.constructor;
-        let listMode = ListMode.get(mode);
+        let listMode = F.ListMode.get(mode);
         let ret = [];
         let names;
 
@@ -1677,7 +1670,7 @@ class File {
         // If matcher is a String, we'll get a default globber compile. If it is a
         // RegExp or a Function, those things are already baked in. In all cases, we
         // have null or a function that takes a File.
-        let test = Globber.from(matcher);
+        let test = F.Globber.from(matcher);
 
         for (let i = 0, n = names.length; i < n; ++i) {
             let name = names[i];
@@ -2145,11 +2138,11 @@ class File {
             else if (p === '~~') {
                 p = this.profile().path;
             }
-            else if (re.homey.test(p)) {
+            else if (this.re.homey.test(p)) {
                 // if (p starts with "~/" or "~\\")
                 p = this.$path.join(this.$os.homedir(), p.substr(1));
             }
-            else if (re.profile.test(p)) {
+            else if (this.re.profile.test(p)) {
                 // if (p starts with "~~/" or "~~\\")
                 p = this.profile().join(p.substr(2)).path;
             }
@@ -2162,7 +2155,7 @@ class File {
         let opts = {};
 
         if (this.Win) {
-            opts.pathExt = (process.env.PATHEXT || '.EXE;.CMD;.BAT;.COM').toLowerCase();
+            opts.pathExt = (process.env.PATHEXT || this._pathExt).toLowerCase();
         }
 
         if (options) {
@@ -2173,9 +2166,21 @@ class File {
                 opts.path = options;
             }
 
-            //TODO handle ~/foo in path
-            if (Array.isArray(opts.path)) {
-                opts.path = opts.path.join(this.Win ? ';' : ':');
+            let path = opts.path;
+
+            if (path) {
+                // a PATH might be a String or a String[] or a File[] (or a mixed array
+                // of both). We need to deal with that as well as ~/foo and ~~/foo
+                // translation.
+                if (!Array.isArray(path)) {
+                    path = path.split(this.pathSep);
+                }
+
+                for (let i = path.length; i-- > 0;) {
+                    path[i] = this.fspath(path[i]);
+                }
+
+                opts.path = path.join(this.pathSep);
             }
         }
 
@@ -2183,75 +2188,85 @@ class File {
     }
 
 } // class File
+
 const proto = File.prototype;
 
 Object.assign(proto, {
     $isFile: true,
+    re: File.re = {
+        abs: /^~{1,2}[\/\\]/,
+        homey: /^~[\/\\]/,
+        profile: /^~~[\/\\]/,
+        slash: /\\/g,
+        split: isWin ? /[\/\\]/g : /[\/]/g
+    },
+
     _stat: null,
 
     _extent: undefined,
     _name: undefined,
-    _parent: undefined
+    _parent: undefined,
+
+    // These are the only pieces of the fs and path module that we use so we copy them
+    // to objects for easy overriding.
+    $fs : File.$fs = {
+        realpath: $fs.realpath,
+        realpathSync: $fs.realpathSync,
+        statSync: $fs.statSync,
+        lstatSync: $fs.lstatSync,
+        stat: $fs.stat,
+        lstat: $fs.lstat,
+        readdir: $fs.readdir,
+        readdirSync: $fs.readdirSync,
+        readFile: $fs.readFile,
+        readFileSync: $fs.readFileSync,
+        rmdir: $fs.rmdir,
+        unlink: $fs.unlink,
+        rmdirSync: $fs.rmdirSync,
+        unlinkSync: $fs.unlinkSync,
+        writeFile: $fs.writeFile,
+        writeFileSync: $fs.writeFileSync
+    },
+
+    $md: File.$md = {
+        mkdirp: $mkdirp,
+        mkdirpSync: $mkdirp.sync
+    },
+
+    $os: File.$os = {
+        homedir: $os.homedir
+    },
+
+    $path: File.$path = {
+        join: $path.join,
+        relative: $path.relative,
+        resolve: $path.resolve,
+        normalize: $path.normalize,
+        isAbsolute: $path.isAbsolute
+    },
+
+    $rm: File.$rm = {
+        rimraf: $rimraf,
+        rimrafSync: $rimraf.sync
+    },
+
+    $tmp: File.$tmp = {
+        dir: $tmp.dir,
+        dirSync: $tmp.dirSync,
+        tmpName: $tmp.tmpName,
+        tmpNameSync: $tmp.tmpNameSync
+    }
 });
 
 File.WIN = isWin;
 File.MAC = isMac;
 File.NOCASE = isWin || isMac;
+File._pathExt = '.EXE;.CMD;.BAT;.COM';
 
 File.isDirectory = File.isDir;
-File.re = re;
 
+File.pathSep = isWin ? ';' : ':';
 File.separator = $path.sep;
-
-// These are the only pieces of the fs and path module that we use so we copy them to
-// objects for easy overriding.
-File.$fs = File.prototype.$fs = {
-    realpath: $fs.realpath,
-    realpathSync: $fs.realpathSync,
-    statSync: $fs.statSync,
-    lstatSync: $fs.lstatSync,
-    stat: $fs.stat,
-    lstat: $fs.lstat,
-    readdir: $fs.readdir,
-    readdirSync: $fs.readdirSync,
-    readFile: $fs.readFile,
-    readFileSync: $fs.readFileSync,
-    rmdir: $fs.rmdir,
-    unlink: $fs.unlink,
-    rmdirSync: $fs.rmdirSync,
-    unlinkSync: $fs.unlinkSync,
-    writeFile: $fs.writeFile,
-    writeFileSync: $fs.writeFileSync
-};
-
-File.$md = File.prototype.$md = {
-    mkdirp: $mkdirp,
-    mkdirpSync: $mkdirp.sync
-};
-
-File.$os = File.prototype.$os = {
-    homedir: $os.homedir
-};
-
-File.$path = File.prototype.$path = {
-    join: $path.join,
-    relative: $path.relative,
-    resolve: $path.resolve,
-    normalize: $path.normalize,
-    isAbsolute: $path.isAbsolute
-};
-
-File.$rm = File.prototype.$rm = {
-    rimraf: $rimraf,
-    rimrafSync: $rimraf.sync
-};
-
-File.$tmp = File.prototype.$tmp = {
-    dir: $tmp.dir,
-    dirSync: $tmp.dirSync,
-    tmpName: $tmp.tmpName,
-    tmpNameSync: $tmp.tmpNameSync
-};
 
 File.profilers = {
     default (home, company) {
@@ -3035,6 +3050,8 @@ File.Stat = Stat;
  */
 class Walker {
     constructor (root, mode, matcher, before, after) {
+        const F = root.constructor;
+
         this.matcher = this.test = null;
 
         if (typeof mode === 'function') {
@@ -3050,7 +3067,7 @@ class Walker {
         }
         else {
             // walk('A', '*.txt', f => {}, ...);
-            let fn = Globber.from(matcher); // fn(string, File)
+            let fn = F.Globber.from(matcher); // fn(string, File)
 
             // For descending, we need to list directories
             this.matcher = (name, file) => {
@@ -3065,7 +3082,7 @@ class Walker {
 
         this.before = before;
         this.after = after;
-        this.listMode = ListMode.get('Os' + (mode || ''));
+        this.listMode = F.ListMode.get('Os' + (mode || ''));
 
         /**
          * @property {File} at
