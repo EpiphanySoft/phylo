@@ -895,7 +895,7 @@ That is:
 
 ## Finding Programs
 
-The `which()` method can be used like the `which` command:
+The `which()` method can be used like the standard `which` shell command:
 
     let nodejs = File.which('node');
 
@@ -918,7 +918,7 @@ The asynchronous form is similar:
 
 You can also customize the search to your own list of directories:
 
-    let app = File.which('app', [ '~/bin', '/' ]);
+    let app = File.which('app', [ '~/bin', '.' ]);
 
 ## Creating Directories
 
@@ -932,7 +932,17 @@ The `mkdir()` method returns the `File` instance after creating the directory tr
 
 Unlike many other `File` methods, if `mkdir()` fails it will throw an `Error`.
 
----
+## Credits
+
+Phylo owes many thanks to the following modules and, of course, their authors and
+maintainers (in alphabetic order):
+
+ - fswin [npm](https://www.npmjs.com/package/fswin) / [GitHub](https://github.com/xxoo/node-fswin)
+ - json5 [npm](https://www.npmjs.com/package/json5) / [GitHub](https://github.com/aseemk/json5)
+ - mkdirp [npm](https://www.npmjs.com/package/mkdirp) / [GitHub](https://github.com/substack/node-mkdirp)
+ - rimraf [npm](https://www.npmjs.com/package/rimraf) / [GitHub](https://github.com/isaacs/rimraf)
+ - tmp [npm](https://www.npmjs.com/package/tmp) / [GitHub](https://github.com/raszi/node-tmp)
+ - which [npm](https://www.npmjs.com/package/which) / [GitHub](https://github.com/isaacs/node-which)
 
 ## Conclusion
 
