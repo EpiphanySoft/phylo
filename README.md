@@ -946,7 +946,7 @@ maintainers (in alphabetic order):
 
 ## Conclusion
 
-For some opinions on when to use async methods see this [article](Async-vs-Sync.md).
+For some opinions on when to use async methods see [here](Async-vs-Sync.md).
 
 Enjoy!
 
