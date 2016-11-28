@@ -16,7 +16,8 @@ dispatched.
 
 So the question becomes:
 
-<br><blockquote><i>
+<br>
+<blockquote><i>
 What asynchronous callbacks will this synchronous code block?
 </i></blockquote>
 
@@ -29,7 +30,8 @@ synchronous calls in this case.
 
 But some would put the question on its head and ask instead:
 
-<br><blockquote><i>
+<br>
+<blockquote><i>
 If asynchronous code is always OK, why not stick with it in all cases?
 </i></blockquote>
 
@@ -37,7 +39,8 @@ If there were no costs associated with purely asynchronous code vs the synchrono
 work-a-like, maybe that approach would make sense. Developers experienced with the
 complexity of asynchronous code should take heart and some relief with a good quote:
 
-<br><blockquote>
+<br>
+<blockquote>
 "A foolish consistency is the hobgoblin of little minds,<br>
 adored by little statesmen and philosophers and divines"
 
@@ -48,11 +51,11 @@ The upcoming `async` and `await` language features will greatly improve this sit
 but even with them, asynchronous code will be more complex then the synchronous
 equivalent.
 
-So, if you are providing a library (like Phylo), then what? Since a library author
+So, if you are providing a library (like **phylo**), then what? Since a library author
 cannot know if their library will be used in a server context or a command-line tool,
-such libraries (as with Node's own `fs` module) provide both forms.
+such libraries (as with Node's own **fs** module) provide both forms.
 
-When using Phylo, it is best to understand your own context and decide if your life
-would be simpler, easier and more productive by using synchronous API's.
+When using **phylo**, it is best to understand your own context and decide if your code
+will be simpler, easier and more maintainable by using synchronous API's.
 
 If your context does not prevent it, they are certainly the way to go!
