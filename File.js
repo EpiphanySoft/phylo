@@ -498,9 +498,13 @@ class File {
      * @property {String} name
      * @readonly
      * The name of the file at the end of the path. For example, given '/foo/bar/baz',
-     * the `name` is 'baz'. Paths that end with a separator (e.g., '/foo/bar/') are
-     * treated as if the trailing separator were not present. That is, 'bar' would be
-     * the `name` of '/foo/bar/'.
+     * the `name` is 'baz'.
+     *
+     * Paths that end with a separator (e.g., '/foo/bar/') are treated as if the trailing
+     * separator were not present. That is, 'bar' would be the `name` of '/foo/bar/'. This
+     * is to be consistent with this behavior:
+     *
+     *      File.from('/foo/bar/').equals('/foo/bar');  // === true
      *
      * Typically known as `basename` on Linux-like systems.
      */
@@ -530,6 +534,12 @@ class File {
      * The parent directory of this file. For example, for '/foo/bar/baz' the `parent` is
      * '/foo/bar'. This is `null` for the file system root.
      *
+     * Paths that end with a separator (e.g., '/foo/bar/') are treated as if the trailing
+     * separator were not present. That is, '/foo' would be the `parent` of '/foo/bar/'.
+     * This is to be consistent with this behavior:
+     *
+     *      File.from('/foo/bar/').equals('/foo/bar');  // === true
+     *
      * Typically known as `dirname` on Linux-like systems.
      */
     get parent () {
@@ -540,15 +550,22 @@ class File {
             let sep = this.lastSeparator();
             let ret;
 
-            if (sep < 0) {
+            if (sep > -1) {
+                if (sep === path.length - 1) {
+                    // e.g. 'foo/bar/'
+                    sep = this.lastSeparator(sep - 1);
+                }
+
+                ret = path.substr(0, sep);
+            }
+
+            if (!ret) {
+                path = this.absolutePath();
                 ret = this.$path.resolve(path, '..');
 
                 if (path === ret) {
                     ret = null;
                 }
-            }
-            else {
-                ret = path.substr(0, sep);
             }
 
             this._parent = parent = this.constructor.from(ret);
@@ -709,7 +726,7 @@ class File {
     }
 
     slashifiedPath () {
-        return this.path.replace(this.re.slash, '/');
+        return this.path.replace(this.re.backslash, '/');
     }
 
     /**
@@ -728,10 +745,12 @@ class File {
         return this.path;
     }
 
-    terminatedPath (separator) {
+    terminatedPath (separator, match) {
         if (separator == null || separator === true) {
             separator = this.constructor.separator;
         }
+
+        match = match || this.re.slash;
 
         let p = this.path;
 
@@ -740,12 +759,12 @@ class File {
             let c = p[n];
 
             if (separator) {
-                if (c !== separator) {
+                if (!match.test(c)) {
                     p += separator;
                 }
             }
             else {
-                while (n >= 0 && (c === '/' || c === '\\')) {
+                while (n >= 0 && match.test(c)) {
                     p = p.substr(0, n--);
                     c = p[n];
                 }
@@ -755,16 +774,16 @@ class File {
         return p || '';
     }
 
-    terminate (separator) {
-        return this.constructor.from(this.terminatedPath(separator));
+    terminate (separator, match) {
+        return this.constructor.from(this.terminatedPath(separator, match));
     }
 
-    unterminatedPath () {
-        return this.terminatedPath(false);
+    unterminatedPath (match) {
+        return this.terminatedPath(false, match);
     }
 
-    unterminate () {
-        return this.constructor.from(this.unterminatedPath());
+    unterminate (match) {
+        return this.constructor.from(this.unterminatedPath(match));
     }
 
     //-----------------------------------------------------------------
@@ -847,7 +866,10 @@ class File {
                 b = b.toLocaleLowerCase();
             }
 
-            if (a.startsWith(b)) {
+            if (a === b) {
+                return true;
+            }
+            if (b.startsWith(a)) {
                 // a = '/foo/bar'
                 // b = '/foo/bar/zip' ==> true
                 // b = '/foo/barf'    ==> false
@@ -2207,9 +2229,10 @@ Object.assign(proto, {
     $isFile: true,
     re: File.re = {
         abs: /^~{1,2}[\/\\]/,
+        backslash: /\\/g,
         homey: /^~[\/\\]/,
         profile: /^~~[\/\\]/,
-        slash: /\\/g,
+        slash: isWin ? /[\/\\]/ : /[\/]/,
         split: isWin ? /[\/\\]/g : /[\/]/g
     },
 
