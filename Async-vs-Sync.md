@@ -42,8 +42,7 @@ complexity of asynchronous code should take heart and some relief with a good qu
 <br>
 <blockquote>
 "A foolish consistency is the hobgoblin of little minds,<br>
-adored by little statesmen and philosophers and divines"
-
+adored by little statesmen and philosophers and divines"<br>
 -- Emerson [Self-Reliance](http://www.emersoncentral.com/selfreliance.htm)
 </blockquote>
 
@@ -55,7 +54,7 @@ So, if you are providing a library (like **phylo**), then what? Since a library 
 cannot know if their library will be used in a server context or a command-line tool,
 such libraries (as with Node's own **fs** module) provide both forms.
 
-When using **phylo**, it is best to understand your own context and decide if your code
-will be simpler, easier and more maintainable by using synchronous API's.
+It is best to understand your own context and decide if your code will be simpler,
+easier and more maintainable by using synchronous API's.
 
 If your context does not prevent it, they are certainly the way to go!
