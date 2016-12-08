@@ -43,7 +43,7 @@ complexity of asynchronous code should take heart and some relief with a good qu
 <blockquote>
 "A foolish consistency is the hobgoblin of little minds,<br>
 adored by little statesmen and philosophers and divines"<br>
--- Emerson [Self-Reliance](http://www.emersoncentral.com/selfreliance.htm)
+-- Emerson <a href="http://www.emersoncentral.com/selfreliance.htm">Self-Reliance</a>
 </blockquote>
 
 The upcoming `async` and `await` language features will greatly improve this situation,
