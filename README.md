@@ -1,5 +1,10 @@
 # phylo
 
+[![Build Status](https://travis-ci.org/dongryphon/phylo.svg?branch=master)](https://travis-ci.org/dongryphon/phylo)
+[![Dependencies Status](https://david-dm.org/dongryphon/phylo/status.svg)](https://david-dm.org/dongryphon/phylo)
+[![npm version](https://badge.fury.io/js/phylo.svg)](https://badge.fury.io/js/phylo)
+[![MIT Licence](https://badges.frapsoft.com/os/mit/mit.svg?v=103)](https://opensource.org/licenses/mit-license.php)
+
 Phylo (pronounced "File-o") is a File operations class designed for maximum
 convenience and clarity of expression. The primary export of `phylo` is the
 `File` class which is used to wrap a file-system path string.
