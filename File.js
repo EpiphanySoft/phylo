@@ -700,18 +700,29 @@ class File {
         return p && this.$path.normalize(p);
     }
 
-    relativePath (path) {
-        if (path.$isFile) {
-            path = path.absolutePath();
+    /**
+     * Returns the relative path of this file in relation to the `from` file or path.
+     * @param {String/File} from The base location from which this file is relative.
+     * @return {String}
+     */
+    relativePath (from) {
+        if (from.$isFile) {
+            from = from.absolutePath();
         }
 
         let p = this.absolutePath();
 
-        return p && path && this.$path.relative(p, path);
+        return p && from && this.$path.relative(from, p);
     }
 
-    relativize (path) {
-        return this.constructor.from(this.relativePath(path));
+    /**
+     * Returns a `File` object containing the relative path of this file in relation to
+     * the `from` file or path.
+     * @param {String/File} from The base location from which this file is relative.
+     * @return {File}
+     */
+    relativize (from) {
+        return this.constructor.from(this.relativePath(from));
     }
 
     resolvePath (...parts) {

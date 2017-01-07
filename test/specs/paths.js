@@ -1,3 +1,7 @@
+'use strict';
+
+/* global require, describe, it, afterEach, beforeEach */
+
 const File = require('../../File');
 
 const Assert = require('assertly');
@@ -8,7 +12,7 @@ const $path = require('path');
 
 //const co = require('co');
 
-//const Utils = require('../util');
+require('../util');
 
 describe('Path manipulation', function () {
     const SLASH = File.separator;
@@ -24,17 +28,25 @@ describe('Path manipulation', function () {
 
         it('return false for abs.isRelative', function () {
             let f = File.cwd();
+
             expect(f.isRelative()).to.be(false);
+
+            expect(f).to.be.absolute();
+            expect(f).to.not.be.relative();
         });
 
         it('return true for abs.isAbsolute', function () {
             let f = File.cwd();
             expect(f.isAbsolute()).to.be(true);
+            expect(f).to.be.absolute();
         });
 
         it('return true for rel.isRelative', function () {
             let f = new File(P);
             expect(f.isRelative()).to.be(true);
+
+            expect(f).to.not.be.absolute();
+            expect(f).to.be.relative();
         });
 
         it('return false for rel.isAbsolute', function () {
@@ -59,6 +71,17 @@ describe('Path manipulation', function () {
             let p = $path.resolve(process.cwd(), P);
 
             expect(s).to.be(p);
+        });
+
+        it('should relative paths', function () {
+            let cwd = File.cwd();
+            let f = cwd.parent.join('foo');
+
+            expect(f).to.be.absolute();
+            let r = f.relativize(cwd).slashify();
+
+            expect(r).to.be.relative();
+            expect(r).to.have.path('../foo');
         });
     });
 
