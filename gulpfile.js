@@ -1,16 +1,16 @@
 'use strict';
 
-var path = require('path');
-var gulp = require('gulp');
-var excludeGitignore = require('gulp-exclude-gitignore');
-var mocha = require('gulp-mocha');
-var istanbul = require('gulp-istanbul');
-var nsp = require('gulp-nsp');
-var plumber = require('gulp-plumber');
-var coveralls = require('gulp-coveralls');
+let $path = require('path');
+let gulp = require('gulp');
+let excludeGitignore = require('gulp-exclude-gitignore');
+let mocha = require('gulp-mocha');
+let istanbul = require('gulp-istanbul');
+let nsp = require('gulp-nsp');
+let plumber = require('gulp-plumber');
+let coveralls = require('gulp-coveralls');
 
 gulp.task('nsp', function (cb) {
-    nsp({package: path.resolve('package.json')}, cb);
+    nsp({ package: $path.resolve('package.json') }, cb);
 });
 
 gulp.task('pre-test', function () {
@@ -23,11 +23,11 @@ gulp.task('pre-test', function () {
 });
 
 gulp.task('test', ['pre-test'], function (cb) {
-    var mochaErr;
+    let mochaErr;
 
     gulp.src('test/**/*.js')
         .pipe(plumber())
-        .pipe(mocha({reporter: 'spec'}))
+        .pipe(mocha({ reporter: 'spec' }))
         .on('error', function (err) {
             mochaErr = err;
         })
@@ -46,7 +46,7 @@ gulp.task('coveralls', ['test'], function () {
         return;
     }
 
-    return gulp.src(path.join(__dirname, 'coverage/lcov.info'))
+    return gulp.src($path.join(__dirname, 'coverage/lcov.info'))
         .pipe(coveralls());
 });
 
