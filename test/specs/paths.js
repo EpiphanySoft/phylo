@@ -208,15 +208,20 @@ describe('Path manipulation', function () {
             it('should resolve ~~', function () {
                 let f = new File('~~');
                 let p = f.fspath;
-                expect(p.endsWith(SLASH + 'Acme')).to.be(true);
-                expect(p.startsWith($os.homedir())).to.be(true);
+                let home = $os.homedir();
+
+                expect(p.substr(p.length - 5)).to.be(SLASH + 'Acme');
+                expect(p.substr(0, home.length)).to.be(home);
             });
 
             it('should resolve ~/foo', function () {
                 let f = new File('~~/foo');
                 let p = f.fspath;
-                expect(p.startsWith($os.homedir())).to.be(true);
-                expect(p.endsWith(SLASH + 'Acme' + SLASH + 'foo')).to.be(true);
+                let home = $os.homedir();
+                let tail = SLASH + 'Acme' + SLASH + 'foo';
+
+                expect(p.substr(0, home.length)).to.be(home);
+                expect(p.substr(p.length - tail.length)).to.be(tail);
             });
         });
     });
