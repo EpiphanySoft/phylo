@@ -4,7 +4,9 @@
     "description": "File operations class",
     "main": "File.js",
     "scripts": {
-        "test": "gulp test"
+        "test": "gulp test",
+        "debug": "devtool node_modules/mocha/bin/_mocha -qc --break -- ./test/specs/**/*.js",
+        "_test": "mocha ./test/specs/**/*.js"
     },
     "repository": {
         "type": "git",

@@ -16,9 +16,6 @@ const platform = $os.platform();
 const isWin = /^win\d\d$/i.test(platform);
 const isMac = /^darwin$/i.test(platform);
 
-// Do not require wrongly... fswin wrecks non-Windows platforms:
-const $fswin = isWin ? require('fswin') : null;
-
 //================================================================================
 
 /**
@@ -3520,6 +3517,21 @@ File.writers.json5 = File.writers.json.extend({
 
 //-----------------------------------------------------------------------------
 
+// Do not require wrongly... fswin wrecks non-Windows platforms:
+const $fswin = (function () {
+    if (isWin) {
+        try {
+            return require('fswin');
+        }
+        catch (e) {
+            // ignore
+            File.__fswinError = e;
+        }
+    }
+
+    return null;
+})();
+
 class Win {
     static asyncAttrib (path) {
         return new Promise(resolve => {
@@ -3551,7 +3563,7 @@ class Win {
     }
 }
 
-File.Win = isWin && Win;
+File.Win = $fswin && Win;
 
 //-----------------------------------------------------------------------------
 
