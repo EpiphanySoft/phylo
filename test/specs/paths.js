@@ -1,6 +1,8 @@
 const File = require('../../File');
 
-const expect = require('expect.js');
+const Assert = require('assertly');
+const expect = Assert.expect;
+
 const $os = require('os');
 const $path = require('path');
 
