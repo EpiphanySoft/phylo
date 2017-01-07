@@ -209,8 +209,13 @@ describe('Path manipulation', function () {
                 let f = new File('~~');
                 let p = f.fspath;
                 let home = $os.homedir();
+                let tail = SLASH + 'Acme';
 
-                expect(p.substr(p.length - 5)).to.be(SLASH + 'Acme');
+                if (File.profilers.default.lowerCased) {
+                    tail = tail.toLowerCase();
+                }
+
+                expect(p.substr(p.length - 5)).to.be(tail);
                 expect(p.substr(0, home.length)).to.be(home);
             });
 
@@ -219,6 +224,10 @@ describe('Path manipulation', function () {
                 let p = f.fspath;
                 let home = $os.homedir();
                 let tail = SLASH + 'Acme' + SLASH + 'foo';
+
+                if (File.profilers.default.lowerCased) {
+                    tail = tail.toLowerCase();
+                }
 
                 expect(p.substr(0, home.length)).to.be(home);
                 expect(p.substr(p.length - tail.length)).to.be(tail);

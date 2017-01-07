@@ -318,7 +318,7 @@ class File {
             throw new Error('Must provide company name to isolate profile data');
         }
 
-        let fn = this.profilers[platform] || this.profilers.default;
+        let fn = this.profilers.default;
 
         return fn.call(this, this.home(), company);
     }
@@ -2304,7 +2304,7 @@ File.pathSep = isWin ? ';' : ':';
 File.separator = $path.sep;
 
 File.profilers = {
-    default (home, company) {
+    generic (home, company) {
         return home.join(`.${company.toLowerCase()}`);
     },
 
@@ -2322,6 +2322,10 @@ File.profilers = {
 
     }
 };
+
+File.profilers.generic.lowerCased = File.profilers.linux.lowerCased = true;
+
+File.profilers.default = File.profilers[platform] || File.profilers.generic;
 
 //--------------------
 
