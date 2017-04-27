@@ -1526,7 +1526,7 @@ class File {
                 }
 
                 if (listMode.o) {
-                    result.sort(F.sorter);
+                    result.sort(F.sorter.bind(F));
                 }
 
                 resolve(result);
@@ -1745,10 +1745,10 @@ class File {
         }
 
         if (listMode.O) {
-            ret.sort(F.sorterFilesFirst);
+            ret.sort(F.sorterFilesFirst.bind(F));
         }
         else if (listMode.o) {
-            ret.sort(F.sorter);
+            ret.sort(F.sorter.bind(F));
         }
 
         return ret;
