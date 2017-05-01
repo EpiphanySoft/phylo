@@ -1687,7 +1687,7 @@ class File {
      * @return {File[]}
      */
     list (mode, matcher) {
-        if (typeof mode !== 'string') {
+        if (typeof mode !== 'string' && mode.constructor !== this.constructor.ListMode) {
             matcher = mode;
             mode = '';
         }
@@ -3107,7 +3107,7 @@ class Walker {
             before = mode;
             mode = '';
         }
-        else if (typeof typeof matcher === 'function') {
+        else if (typeof matcher === 'function') {
             // walk('A', f => {}, ...);
             after = before;
             before = matcher;
