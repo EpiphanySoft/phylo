@@ -2581,9 +2581,9 @@ class Access {
          * This property holds the bit-wise OR of the available access modes
          * `fs.constants.R_OK`, `fs.constants.W_OK` and/or  `fs.constants.X_OK`.
          */
-        this.mask = (this.r ? $fs.constants.R_OK : 0) |
-                    (this.w ? $fs.constants.W_OK : 0) |
-                    (this.x ? $fs.constants.X_OK : 0);
+        this.mask = (this.r ? ($fs.constants || $fs).R_OK : 0) |
+                    (this.w ? ($fs.constants || $fs).W_OK : 0) |
+                    (this.x ? ($fs.constants || $fs).X_OK : 0);
 
         /**
          * @property {'r'/'rw'/'rwx'/'w'/'wx'/'x'} name
