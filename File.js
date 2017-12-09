@@ -1,20 +1,24 @@
 'use strict';
 
-// Use $ prefix for imports to avoid name collision with locals and parameters
+// Use $ wrapper for imports to avoid name collision with locals and parameters
 // (esp bad here is 'path' module):
-const $fs =     require('fs');
-const $json5 =  require('json5');
-const $mkdirp = require('mkdirp');
-const $os =     require('os');
-const $path =   require('path');
-const $rimraf = require('rimraf');
-const $tmp =    require('tmp');
-const $which =  require('which');
+const $ = {
+    fs:     require('fs'),
+    json5:  require('json5'),
+    mkdirp: require('mkdirp'),
+    os:     require('os'),
+    path:   require('path'),
+    rimraf: require('rimraf'),
+    tmp:    require('tmp'),
+    which:  require('which')
+};
 
-const platform = $os.platform();
+const platform = $.os.platform();
 
 const isWin = /^win\d\d$/i.test(platform);
 const isMac = /^darwin$/i.test(platform);
+
+const driveLetterRe = /^[A-Z]:[\\]?$/i;
 
 //================================================================================
 
@@ -132,7 +136,7 @@ class File {
         let opts = this._whichOptions(options);
 
         return new Promise((resolve, reject) => {
-            $which(name, opts, (err, result) => {
+            $.which(name, opts, (err, result) => {
                 if (err) {
                     if (err.code === 'ENOENT') {
                         resolve(null);
@@ -467,7 +471,7 @@ class File {
 
         try {
             // throws on not found...
-            return this.from($which.sync(name, opts));
+            return this.from($.which.sync(name, opts));
         }
         catch (e) {
             if (e.code === 'ENOENT') {
@@ -557,10 +561,10 @@ class File {
             }
 
             if (!ret) {
-                path = this.absolutePath();
-                ret = this.$path.resolve(path, '..');
+                let abs = this.absolutePath();
+                ret = this.$path.resolve(abs, '..');
 
-                if (path === ret) {
+                if (abs === ret) {
                     ret = null;
                 }
             }
@@ -2253,51 +2257,51 @@ Object.assign(proto, {
     // These are the only pieces of the fs and path module that we use so we copy them
     // to objects for easy overriding.
     $fs : File.$fs = {
-        realpath: $fs.realpath,
-        realpathSync: $fs.realpathSync,
-        statSync: $fs.statSync,
-        lstatSync: $fs.lstatSync,
-        stat: $fs.stat,
-        lstat: $fs.lstat,
-        readdir: $fs.readdir,
-        readdirSync: $fs.readdirSync,
-        readFile: $fs.readFile,
-        readFileSync: $fs.readFileSync,
-        rmdir: $fs.rmdir,
-        unlink: $fs.unlink,
-        rmdirSync: $fs.rmdirSync,
-        unlinkSync: $fs.unlinkSync,
-        writeFile: $fs.writeFile,
-        writeFileSync: $fs.writeFileSync
+        realpath: $.fs.realpath,
+        realpathSync: $.fs.realpathSync,
+        statSync: $.fs.statSync,
+        lstatSync: $.fs.lstatSync,
+        stat: $.fs.stat,
+        lstat: $.fs.lstat,
+        readdir: $.fs.readdir,
+        readdirSync: $.fs.readdirSync,
+        readFile: $.fs.readFile,
+        readFileSync: $.fs.readFileSync,
+        rmdir: $.fs.rmdir,
+        unlink: $.fs.unlink,
+        rmdirSync: $.fs.rmdirSync,
+        unlinkSync: $.fs.unlinkSync,
+        writeFile: $.fs.writeFile,
+        writeFileSync: $.fs.writeFileSync
     },
 
     $md: File.$md = {
-        mkdirp: $mkdirp,
-        mkdirpSync: $mkdirp.sync
+        mkdirp: $.mkdirp,
+        mkdirpSync: $.mkdirp.sync
     },
 
     $os: File.$os = {
-        homedir: $os.homedir
+        homedir: $.os.homedir
     },
 
     $path: File.$path = {
-        join: $path.join,
-        relative: $path.relative,
-        resolve: $path.resolve,
-        normalize: $path.normalize,
-        isAbsolute: $path.isAbsolute
+        join: $.path.join,
+        relative: $.path.relative,
+        resolve: $.path.resolve,
+        normalize: $.path.normalize,
+        isAbsolute: $.path.isAbsolute
     },
 
     $rm: File.$rm = {
-        rimraf: $rimraf,
-        rimrafSync: $rimraf.sync
+        rimraf: $.rimraf,
+        rimrafSync: $.rimraf.sync
     },
 
     $tmp: File.$tmp = {
-        dir: $tmp.dir,
-        dirSync: $tmp.dirSync,
-        tmpName: $tmp.tmpName,
-        tmpNameSync: $tmp.tmpNameSync
+        dir: $.tmp.dir,
+        dirSync: $.tmp.dirSync,
+        tmpName: $.tmp.tmpName,
+        tmpNameSync: $.tmp.tmpNameSync
     }
 });
 
@@ -2309,7 +2313,7 @@ File._pathExt = '.EXE;.CMD;.BAT;.COM';
 File.isDirectory = File.isDir;
 
 File.pathSep = isWin ? ';' : ':';
-File.separator = $path.sep;
+File.separator = $.path.sep;
 
 File.profilers = {
     generic (home, company) {
@@ -2581,9 +2585,9 @@ class Access {
          * This property holds the bit-wise OR of the available access modes
          * `fs.constants.R_OK`, `fs.constants.W_OK` and/or  `fs.constants.X_OK`.
          */
-        this.mask = (this.r ? ($fs.constants || $fs).R_OK : 0) |
-                    (this.w ? ($fs.constants || $fs).W_OK : 0) |
-                    (this.x ? ($fs.constants || $fs).X_OK : 0);
+        this.mask = (this.r ? ($.fs.constants || $.fs).R_OK : 0) |
+                    (this.w ? ($.fs.constants || $.fs).W_OK : 0) |
+                    (this.x ? ($.fs.constants || $.fs).X_OK : 0);
 
         /**
          * @property {'r'/'rw'/'rwx'/'w'/'wx'/'x'} name
@@ -3382,7 +3386,7 @@ File.readers.json = File.readers.text.extend({
         // general, JSON5 is a very relaxed form of JSON that accepts all valid JSON
         // files and goes beyond to a nearly proper JavaScript-subset. All w/o eval
         // so it is secure.
-        return $json5.parse(data);
+        return $.json5.parse(data);
     }
 });
 
@@ -3517,7 +3521,7 @@ File.writers.json = File.writers.text.extend({
 
 File.writers.json5 = File.writers.json.extend({
     serialize (data) {
-        return $json5.stringify(data, this.replacer, this.indent);
+        return $.json5.stringify(data, this.replacer, this.indent);
     }
 });
 
