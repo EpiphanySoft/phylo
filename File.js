@@ -673,7 +673,7 @@ class File {
         let path = this.path,
             i = path.lastIndexOf('/', start);
 
-        if (this.constructor.Win) {
+        if (this.constructor.WIN) {
             // Windows respects both / and \ as path separators
             i = Math.max(i, path.lastIndexOf('\\'));
         }
@@ -2196,7 +2196,7 @@ class File {
     static _whichOptions (options) {
         let opts = {};
 
-        if (this.Win) {
+        if (this.WIN) {
             opts.pathExt = (process.env.PATHEXT || this._pathExt).toLowerCase();
         }
 
@@ -3014,7 +3014,7 @@ class ListMode extends Options {
         }
 
         // showDots on Windows when options.w is true:
-        this.hideDots = !this.A && !(File.Win && this.w); // = !showDots
+        this.hideDots = !this.A && !(File.WIN && this.w); // = !showDots
     }
 }
 
