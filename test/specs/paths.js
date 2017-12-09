@@ -18,6 +18,29 @@ describe('Path manipulation', function () {
     const SLASH = File.separator;
     const NOCASE = File.NOCASE;
 
+    describe('root handling', function () {
+        it('should keep slash', function () {
+            let d = File.home();
+
+            while (d.path.indexOf(File.separator) < d.path.lastIndexOf(File.separator)) {
+                d = d.parent;
+            }
+
+            d = d.parent;
+
+            if (File.WIN) {
+                expect(d.path).to.match(/^[A-Z]:\\$/i);
+            }
+            else {
+                expect(d.path).to.be('/');
+            }
+
+            let r = d.parent;
+
+            expect(r).to.be(null);
+        });
+    });
+
     describe('absolute and relative paths', function () {
         const P = 'bar/../foo';
 

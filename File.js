@@ -558,6 +558,12 @@ class File {
                 }
 
                 ret = path.substr(0, sep);
+                if (sep === 2 && driveLetterRe.test(ret)) {
+                    ret += '\\';
+                    if (ret === path) {
+                        ret = null;
+                    }
+                }
             }
 
             if (!ret) {
