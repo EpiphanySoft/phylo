@@ -3132,7 +3132,7 @@ class Walker {
             };
             // But the user's before/after should only be called on matches
             this.test = file => {
-                let rel = this.root.relativePath(file);
+                let rel = file.relativePath(this.root);
                 return fn(rel, file);
             }
         }
@@ -3140,6 +3140,13 @@ class Walker {
         this.before = before;
         this.after = after;
         this.listMode = F.ListMode.get('Os' + (mode || ''));
+
+        // If the caller only wants files, we'll have to do that ourselves so that
+        // we can still recurse into folders...
+        this.skipDirs = this.listMode.f;
+        if (this.skipDirs) {
+            this.listMode = F.ListMode.get('Os' + mode.split('f').join(''));
+        }
 
         /**
          * @property {File} at
@@ -3171,59 +3178,54 @@ class Walker {
     }
 
     _after (at) {
-        if (!this.after || (this.test && !this.test(at))) {
-            return true;
-        }
-
-        return this.after(at, this);
+        return this._ping(at, 'after');
     }
 
     _before (at) {
         this.at = at;
+        return this._ping(at, 'before');
+    }
 
-        if (!this.before || (this.test && !this.test(at))) {
+    _ping (at, fn) {
+        if (!this[fn] || (this.skipDirs && at.isDir()) || (this.test && !this.test(at))) {
             return true;
         }
 
-        return this.before(at, this);
+        return this[fn](at, this);
     }
 
     asyncDescend (at) {
         try {
-            let result = Promise.resolve(this._before(at));
-
-            return result.then(r => {
+            return Promise.resolve(this._before(at)).then(r => {
                 if (r === false || this.stop) {
                     return;
                 }
 
-                return at.asyncIsDir().then(isDir => {
-                    if (isDir) {
-                        return at.asyncList(this.listMode, this.matcher).then(children => {
-                            let sequence = Promise.resolve();
+                if (at.isDir()) {
+                    return at.asyncList(this.listMode, this.matcher).then(children => {
+                        let sequence = Promise.resolve();
 
-                            this.stack.push(at);
+                        this.stack.push(at);
 
-                            children.forEach(c => {
-                                sequence = sequence.then(() => {
-                                    if (!this.stop) {
-                                        return this.asyncDescend(c);
-                                    }
-                                });
-                            });
-
-                            if (this.after) {
-                                sequence = sequence.then(() => {
-                                    return this._after(at);
-                                });
-                            }
-
-                            return sequence.then(() => {
-                                this.stack.pop();
+                        children.forEach(c => {
+                            sequence = sequence.then(() => {
+                                if (!this.stop) {
+                                    return this.asyncDescend(c);
+                                }
                             });
                         });
-                    }
-                });
+
+                        if (this.after) {
+                            sequence = sequence.then(() => {
+                                return this._after(at);
+                            });
+                        }
+
+                        return sequence.then(() => {
+                            this.stack.pop();
+                        });
+                    });
+                }
             });
         }
         catch (e) {
