@@ -3433,10 +3433,10 @@ File.Writer = class extends File.Driver {
     }
 
     asyncWrite (file, data) {
-        let path = file.fspath;
+        let abs = file.absolutify();
 
         return new Promise((resolve, reject) => {
-            file.$fs.writeFile(path, data, this.options, err => {
+            file.$fs.writeFile(abs.path, data, this.options, err => {
                 if (err) {
                     reject(err);
                 }
