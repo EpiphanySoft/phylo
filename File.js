@@ -3423,22 +3423,20 @@ File.Writer = class extends File.Driver {
      */
 
     asyncSave (file, data) {
-        let abs = file.absolutify();
-
         // wrap this.serialize in Promise.resolve() to allow it to be a value or
         // a promise (maybe serialization needs to be async)...
-        Promise.resolve(this._serialize(data)).then(content => {
-            return abs.parent.asyncMkdir(this.dirmode).then(() => {
-                return this.asyncWrite(abs.path, content);
-            })
-        });
+        return Promise.resolve(this._serialize(data)).then(content =>
+            file.parent.asyncMkdir(this.dirmode).then(() =>
+                this.asyncWrite(file, content)
+            )
+        );
     }
 
     asyncWrite (file, data) {
-        let path = file.fspath;
+        let abs = file.absolutify();
 
         return new Promise((resolve, reject) => {
-            file.$fs.writeFile(path, data, this.options, err => {
+            file.$fs.writeFile(abs.path, data, this.options, err => {
                 if (err) {
                     reject(err);
                 }
